@@ -1,15 +1,9 @@
 {
+	"name": "exhaust-research",
+	"main": "src/worker.ts",
 	"compatibility_date": "2026-04-06",
 	"compatibility_flags": ["global_fetch_strictly_public"],
-	"name": "exhaust-research",
-	"main": "@astrojs/cloudflare/entrypoints/server",
-	"assets": {
-		"directory": "./dist",
-		"binding": "ASSETS"
-	},
-	"observability": {
-		"enabled": true
-	},
+	"observability": { "enabled": true },
 	"d1_databases": [
 		{
 			"binding": "DB",
@@ -20,6 +14,5 @@
 	"vars": {
 		"AMAZON_AFFILIATE_TAG": "chrisputer-20"
 	}
-	// ANTHROPIC_API_KEY: Set via `wrangler secret put ANTHROPIC_API_KEY` — NEVER as a var
-	// Rate limiting: Configure via Cloudflare WAF dashboard + application-level in api/research.ts
+	// ANTHROPIC_API_KEY: Set via `wrangler secret put ANTHROPIC_API_KEY`
 }

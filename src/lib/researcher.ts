@@ -1,61 +1,42 @@
-import Anthropic from '@anthropic-ai/sdk';
-import type { ScrapedSource } from './scraper';
-import { ResearchResultSchema, type ValidatedResearchResult } from './validation';
+import type { ScrapedSource, ResearchResult, ProductResult } from '../types';
 
-export type ResearchResult = ValidatedResearchResult;
+const MAX_SOURCE_CONTEXT = 30_000;
 
-export interface ProductResult {
-  name: string;
-  brand: string;
-  price: number | null;
-  rating: number | null;
-  imageUrl: string | null;
-  productUrl: string;
-  affiliateUrl: string;
-  pros: string[];
-  cons: string[];
-  specs: Record<string, string>;
-  verdict: string;
-  rank: number;
-  bestFor: string;
-}
+const SYSTEM_PROMPT = `You are an expert product researcher. Analyze scraped product data and produce honest, actionable research reports.
 
-const MAX_SOURCE_CONTEXT_LENGTH = 30_000;
-
-const RESEARCH_SYSTEM_PROMPT = `You are an expert product researcher. Your job is to analyze scraped product data and produce comprehensive, honest, and actionable product research reports.
-
-IMPORTANT RULES:
+RULES:
 - Be brutally honest. If a product has problems, say so.
 - Never recommend a product you wouldn't buy yourself.
-- Always explain WHY something is the best pick, not just THAT it is.
+- Explain WHY something is the best pick.
 - Include specific model numbers, prices, and specs when available.
-- If data is insufficient to make a recommendation, say so clearly.
-- Identify the "best for" category for each product (budget, performance, value, beginners, etc.)
-- Rank products by overall recommendation, #1 being your top pick.
+- If data is insufficient, say so clearly.
+- Rank products by overall recommendation, #1 being top pick.
 
-OUTPUT FORMAT: You MUST respond with valid JSON matching this schema:
+OUTPUT: Respond ONLY with valid JSON matching this schema:
 {
-  "summary": "2-3 sentence overview of the research findings",
-  "category": "product category (e.g. 'NAS', 'Router', 'Monitor')",
+  "summary": "2-3 sentence overview",
+  "category": "product category (e.g. NAS, Router, Monitor)",
   "products": [
     {
-      "name": "Full product name with model number",
-      "brand": "Brand name",
+      "name": "Full product name",
+      "brand": "Brand",
       "price": 299.99,
       "rating": 4.5,
-      "imageUrl": null,
-      "productUrl": "URL to product page",
-      "affiliateUrl": "",
-      "pros": ["Pro 1", "Pro 2", "Pro 3"],
+      "productUrl": "URL or empty string",
+      "pros": ["Pro 1", "Pro 2"],
       "cons": ["Con 1", "Con 2"],
       "specs": {"key": "value"},
-      "verdict": "1-2 sentence verdict on this specific product",
+      "verdict": "1-2 sentence verdict",
       "rank": 1,
-      "bestFor": "category like 'budget' or 'performance'"
+      "bestFor": "budget or performance or value"
     }
   ],
-  "methodology": "Brief description of sources analyzed and confidence level"
+  "methodology": "Sources analyzed and confidence level"
 }`;
+
+interface ClaudeResponse {
+  content: Array<{ type: string; text?: string }>;
+}
 
 export async function runResearch(
   apiKey: string,
@@ -63,75 +44,100 @@ export async function runResearch(
   sources: ScrapedSource[],
 ): Promise<ResearchResult> {
   if (sources.length === 0) {
-    throw new Error('No source data gathered — cannot produce research without real data');
+    throw new Error('No source data gathered');
   }
 
-  const client = new Anthropic({ apiKey });
-
-  // Build source context with a total character budget
-  let budget = MAX_SOURCE_CONTEXT_LENGTH;
-  const sourceLines: string[] = [];
+  // Build source context with budget
+  let budget = MAX_SOURCE_CONTEXT;
+  const lines: string[] = [];
   for (let i = 0; i < sources.length && budget > 0; i++) {
     const s = sources[i];
     const line = `--- Source ${i + 1}: ${s.title} (${s.source}) ---\nURL: ${s.url}\n${s.content}`;
-    sourceLines.push(line.slice(0, budget));
+    lines.push(line.slice(0, budget));
     budget -= line.length;
   }
-  const sourceContext = sourceLines.join('\n\n');
 
-  const message = await client.messages.create({
-    model: 'claude-sonnet-4-6',
-    max_tokens: 4096,
-    system: RESEARCH_SYSTEM_PROMPT,
-    messages: [
-      {
-        role: 'user',
-        content: `Research query: "${query}"
-
-Here is the data I've gathered from various sources:
-
-${sourceContext}
-
-Analyze this data and produce a comprehensive product research report. If the sources don't contain enough data for certain products, note that in your methodology section. Focus on giving actionable, honest recommendations.
-
-Respond ONLY with valid JSON.`,
-      },
-    ],
+  const response = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': apiKey,
+      'anthropic-version': '2023-06-01',
+    },
+    body: JSON.stringify({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 4096,
+      system: SYSTEM_PROMPT,
+      messages: [
+        {
+          role: 'user',
+          content: `Research query: "${query}"\n\nSource data:\n\n${lines.join('\n\n')}\n\nAnalyze and produce a product research report. Respond ONLY with valid JSON.`,
+        },
+      ],
+    }),
   });
 
-  const textBlock = message.content.find((b) => b.type === 'text');
-  if (!textBlock || textBlock.type !== 'text') {
+  if (!response.ok) {
+    const errText = await response.text();
+    throw new Error(`Claude API error ${response.status}: ${errText.slice(0, 200)}`);
+  }
+
+  const data: ClaudeResponse = await response.json();
+  const textBlock = data.content.find((b) => b.type === 'text');
+  if (!textBlock?.text) {
     throw new Error('No text response from Claude');
   }
 
-  // Extract JSON from response (handle markdown code blocks)
+  // Extract JSON (handle markdown code blocks)
   let jsonStr = textBlock.text.trim();
-  const jsonMatch = jsonStr.match(/```(?:json)?\s*([\s\S]*?)```/);
-  if (jsonMatch) {
-    jsonStr = jsonMatch[1].trim();
-  }
+  const match = jsonStr.match(/```(?:json)?\s*([\s\S]*?)```/);
+  if (match) jsonStr = match[1].trim();
 
   let parsed: unknown;
   try {
     parsed = JSON.parse(jsonStr);
-  } catch (err) {
-    const preview = jsonStr.slice(0, 200);
-    throw new Error(`Failed to parse Claude response as JSON: ${err}. Preview: ${preview}`);
+  } catch {
+    throw new Error(`Invalid JSON from Claude: ${jsonStr.slice(0, 200)}`);
   }
 
-  const validated = ResearchResultSchema.parse(parsed);
-  return { ...validated, lastUpdated: new Date().toISOString() };
+  return validateResearchResult(parsed);
 }
 
-export function generateAffiliateUrl(productUrl: string, tag: string): string {
-  try {
-    const url = new URL(productUrl);
-    if (url.hostname.includes('amazon.com')) {
-      url.searchParams.set('tag', tag);
-      return url.toString();
+function validateResearchResult(data: unknown): ResearchResult {
+  if (!data || typeof data !== 'object') throw new Error('Response is not an object');
+  const obj = data as Record<string, unknown>;
+
+  const summary = typeof obj.summary === 'string' ? obj.summary : '';
+  const category = typeof obj.category === 'string' ? obj.category : 'General';
+  const methodology = typeof obj.methodology === 'string' ? obj.methodology : '';
+
+  if (!summary) throw new Error('Missing summary in response');
+
+  const rawProducts = Array.isArray(obj.products) ? obj.products : [];
+  const products: ProductResult[] = rawProducts.slice(0, 20).map((p: unknown, i: number) => {
+    if (!p || typeof p !== 'object') {
+      return { name: `Product ${i + 1}`, brand: '', price: null, rating: null, productUrl: '', pros: [], cons: [], specs: {}, verdict: '', rank: i + 1, bestFor: '' };
     }
-    return productUrl;
-  } catch {
-    return productUrl;
-  }
+    const prod = p as Record<string, unknown>;
+    return {
+      name: typeof prod.name === 'string' && prod.name ? prod.name : `Product ${i + 1}`,
+      brand: typeof prod.brand === 'string' ? prod.brand : '',
+      price: typeof prod.price === 'number' ? prod.price : null,
+      rating: typeof prod.rating === 'number' && prod.rating >= 0 && prod.rating <= 5 ? prod.rating : null,
+      productUrl: typeof prod.productUrl === 'string' ? prod.productUrl : '',
+      pros: Array.isArray(prod.pros) ? prod.pros.filter((x: unknown) => typeof x === 'string') : [],
+      cons: Array.isArray(prod.cons) ? prod.cons.filter((x: unknown) => typeof x === 'string') : [],
+      specs: isStringRecord(prod.specs) ? prod.specs : {},
+      verdict: typeof prod.verdict === 'string' ? prod.verdict : '',
+      rank: typeof prod.rank === 'number' ? prod.rank : i + 1,
+      bestFor: typeof prod.bestFor === 'string' ? prod.bestFor : '',
+    };
+  });
+
+  return { summary, category, products, methodology };
+}
+
+function isStringRecord(val: unknown): val is Record<string, string> {
+  if (!val || typeof val !== 'object' || Array.isArray(val)) return false;
+  return Object.values(val as Record<string, unknown>).every((v) => typeof v === 'string');
 }

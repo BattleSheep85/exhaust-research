@@ -1,73 +1,53 @@
 # Exhaust Research
 
-AI-powered product research platform at chrisputer.tech.
+Zero-dependency AI-powered product research platform on Cloudflare Workers.
 
 ## Stack
 
-- **Framework**: Astro 6 + TypeScript (strict)
-- **Hosting**: Cloudflare Pages + Workers
-- **Database**: Cloudflare D1 (SQLite) via Drizzle ORM
-- **AI**: Claude API (Anthropic SDK)
-- **Styling**: Tailwind CSS v4
-- **Scraping**: fetch + HTMLRewriter for static pages
+- **Runtime**: Cloudflare Workers (V8 isolate, TypeScript)
+- **Database**: Cloudflare D1 (SQLite, raw SQL)
+- **AI**: Claude API via raw `fetch()` (no SDK)
+- **Styling**: Hand-written CSS (no frameworks, no build step)
+- **Dependencies**: ZERO. No package.json, no node_modules, nothing.
 
 ## Commands
 
 ```bash
-npm run dev       # Local dev server (uses wrangler under the hood)
-npm run build     # Production build
-npm run preview   # Preview production build locally
+wrangler dev           # Local dev server (port 8787)
+wrangler deploy        # Deploy to Cloudflare
+wrangler deploy --dry-run --outdir=dist  # Build check
 ```
 
 ## Project Structure
 
 ```
 src/
-├── layouts/Layout.astro          # Base layout with nav/footer
-├── components/                   # Reusable UI components
-│   ├── SearchBar.astro
-│   ├── ResearchCard.astro
-│   └── ProductCard.astro
-├── pages/
-│   ├── index.astro               # Landing page
-│   ├── about.astro               # About page
-│   ├── research/
-│   │   ├── index.astro           # Browse/search research
-│   │   ├── new.astro             # Trigger new research
-│   │   └── [slug].astro          # Research result page
-│   ├── blog/
-│   │   └── index.astro           # Blog listing (pending migration)
-│   └── api/
-│       └── research.ts           # POST endpoint to start research
+├── worker.ts              # Entry point, router
+├── types.ts               # All type definitions
 ├── lib/
-│   ├── db.ts                     # D1/Drizzle helpers
-│   ├── scraper.ts                # Web scraping utilities
-│   └── researcher.ts             # Claude API integration
-└── styles/
-    └── global.css                # Tailwind + custom theme
+│   ├── html.ts            # Template engine (tagged template literals, auto-escaping)
+│   ├── utils.ts           # Pure utility functions (slug, ID, URL validation, escaping)
+│   ├── scraper.ts         # Reddit scraping via raw fetch
+│   └── researcher.ts      # Claude API via raw fetch, response validation
+├── pages/
+│   ├── home.ts            # Landing page
+│   ├── about.ts           # About page
+│   ├── api.ts             # POST /api/research handler
+│   ├── research-browse.ts # Browse/search page
+│   └── research-result.ts # Individual research result
 db/
-├── schema.ts                     # Drizzle schema
-└── migrations/                   # SQL migrations
+└── migrations/0000_init.sql  # Database schema
 ```
 
-## Environment Variables
+## Secrets
 
-- `ANTHROPIC_API_KEY` — Claude API key (set in `.dev.vars` locally, Cloudflare secrets in prod)
+- `ANTHROPIC_API_KEY` — set via `wrangler secret put` only, NEVER in wrangler.jsonc
 
-## Deployment
+## Key Design Decisions
 
-1. Create D1 database: `npx wrangler d1 create exhaust-research-db`
-2. Update `database_id` in `wrangler.jsonc`
-3. Run migration: `npx wrangler d1 execute exhaust-research-db --file=db/migrations/0000_init.sql`
-4. Set secret: `npx wrangler secret put ANTHROPIC_API_KEY`
-5. Deploy: `npx wrangler deploy` or push to GitHub for Cloudflare Pages auto-deploy
-
-## Revenue
-
-- Amazon Associates affiliate links (tag: `chrisputer-20`)
-- Affiliate URL generation in `src/lib/researcher.ts`
-- Disclosure on About page
-
-## Rate Limiting
-
-- Configure via Cloudflare WAF dashboard: 10 research requests/hour per IP on `/api/research`
+- No npm, no package managers — supply chain risk is unacceptable
+- All HTML rendered server-side as strings with auto-escaping
+- Claude API called with raw fetch, response validated manually (no Zod, no SDK)
+- D1 queries use parameterized SQL (no ORM)
+- URLs validated before rendering as <a href> (reject non-HTTPS schemes)
+- Application-level rate limiting via D1 query count
