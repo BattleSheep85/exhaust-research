@@ -5,6 +5,7 @@ import SearchBar from '../../components/SearchBar.astro';
 import { getDb } from '../../lib/db';
 import { research, products } from '../../../db/schema';
 import { eq, asc, sql } from 'drizzle-orm';
+import { isValidHttpUrl } from '../../lib/validation';
 
 const { slug } = Astro.params;
 if (!slug) return Astro.redirect('/research');
@@ -22,11 +23,13 @@ if (!entry) {
   return new Response('Research not found', { status: 404 });
 }
 
-// Increment view count
-await db
-  .update(research)
-  .set({ viewCount: sql`${research.viewCount} + 1` })
-  .where(eq(research.id, entry.id));
+// Only increment view count for completed research (not during processing/auto-refresh)
+if (entry.status === 'complete') {
+  await db
+    .update(research)
+    .set({ viewCount: sql`${research.viewCount} + 1` })
+    .where(eq(research.id, entry.id));
+}
 
 // Get products sorted by rank
 const productList = await db
@@ -138,7 +141,7 @@ const sourceList = parseJson<string[]>(entry.sources, []);
           <div>
             <h3 class="text-sm font-semibold text-surface-400 uppercase tracking-wide mb-2">Sources ({sourceList.length})</h3>
             <ul class="space-y-1">
-              {sourceList.map((url) => (
+              {sourceList.filter((url) => isValidHttpUrl(url)).map((url) => (
                 <li>
                   <a href={url} target="_blank" rel="noopener noreferrer" class="text-primary-400 hover:text-primary-300 text-sm transition-colors break-all">
                     {url}

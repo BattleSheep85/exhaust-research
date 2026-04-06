@@ -1,13 +1,8 @@
 import Anthropic from '@anthropic-ai/sdk';
 import type { ScrapedSource } from './scraper';
+import { ResearchResultSchema, type ValidatedResearchResult } from './validation';
 
-export interface ResearchResult {
-  summary: string;
-  category: string;
-  products: ProductResult[];
-  methodology: string;
-  lastUpdated: string;
-}
+export type ResearchResult = ValidatedResearchResult;
 
 export interface ProductResult {
   name: string;
@@ -24,6 +19,8 @@ export interface ProductResult {
   rank: number;
   bestFor: string;
 }
+
+const MAX_SOURCE_CONTEXT_LENGTH = 30_000;
 
 const RESEARCH_SYSTEM_PROMPT = `You are an expert product researcher. Your job is to analyze scraped product data and produce comprehensive, honest, and actionable product research reports.
 
@@ -65,11 +62,22 @@ export async function runResearch(
   query: string,
   sources: ScrapedSource[],
 ): Promise<ResearchResult> {
+  if (sources.length === 0) {
+    throw new Error('No source data gathered — cannot produce research without real data');
+  }
+
   const client = new Anthropic({ apiKey });
 
-  const sourceContext = sources
-    .map((s, i) => `--- Source ${i + 1}: ${s.title} (${s.source}) ---\nURL: ${s.url}\n${s.content}`)
-    .join('\n\n');
+  // Build source context with a total character budget
+  let budget = MAX_SOURCE_CONTEXT_LENGTH;
+  const sourceLines: string[] = [];
+  for (let i = 0; i < sources.length && budget > 0; i++) {
+    const s = sources[i];
+    const line = `--- Source ${i + 1}: ${s.title} (${s.source}) ---\nURL: ${s.url}\n${s.content}`;
+    sourceLines.push(line.slice(0, budget));
+    budget -= line.length;
+  }
+  const sourceContext = sourceLines.join('\n\n');
 
   const message = await client.messages.create({
     model: 'claude-sonnet-4-6',
@@ -103,9 +111,16 @@ Respond ONLY with valid JSON.`,
     jsonStr = jsonMatch[1].trim();
   }
 
-  const result = JSON.parse(jsonStr) as ResearchResult;
-  result.lastUpdated = new Date().toISOString();
-  return result;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(jsonStr);
+  } catch (err) {
+    const preview = jsonStr.slice(0, 200);
+    throw new Error(`Failed to parse Claude response as JSON: ${err}. Preview: ${preview}`);
+  }
+
+  const validated = ResearchResultSchema.parse(parsed);
+  return { ...validated, lastUpdated: new Date().toISOString() };
 }
 
 export function generateAffiliateUrl(productUrl: string, tag: string): string {

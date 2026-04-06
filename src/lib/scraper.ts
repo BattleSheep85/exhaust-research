@@ -10,20 +10,12 @@ const SEARCH_SOURCES = [
 ];
 
 async function fetchWithTimeout(url: string, timeoutMs = 8000): Promise<Response> {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    const response = await fetch(url, {
-      signal: controller.signal,
-      headers: {
-        'User-Agent': 'ExhaustResearch/1.0 (product research bot)',
-        'Accept': 'text/html,application/json',
-      },
-    });
-    return response;
-  } finally {
-    clearTimeout(timeout);
-  }
+  return fetch(url, {
+    signal: AbortSignal.timeout(timeoutMs),
+    headers: {
+      'Accept': 'text/html,application/json',
+    },
+  });
 }
 
 function extractTextFromHtml(html: string): string {

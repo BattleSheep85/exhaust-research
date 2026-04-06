@@ -18,8 +18,8 @@
 		}
 	],
 	"vars": {
-		"ANTHROPIC_API_KEY": ""
+		"AMAZON_AFFILIATE_TAG": "chrisputer-20"
 	}
-	// Rate limiting: Configure via Cloudflare WAF dashboard
-	// Rule: /api/research — 10 requests per hour per IP
+	// ANTHROPIC_API_KEY: Set via `wrangler secret put ANTHROPIC_API_KEY` — NEVER as a var
+	// Rate limiting: Configure via Cloudflare WAF dashboard + application-level in api/research.ts
 }

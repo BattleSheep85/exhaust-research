@@ -4,15 +4,18 @@ import SearchBar from '../../components/SearchBar.astro';
 import ResearchCard from '../../components/ResearchCard.astro';
 import { getDb } from '../../lib/db';
 import { research } from '../../../db/schema';
-import { desc, eq, like, sql } from 'drizzle-orm';
+import { desc, eq, and, like, sql } from 'drizzle-orm';
+import { escapeLikeWildcards } from '../../lib/validation';
 
 const db = getDb(Astro.locals.runtime.env.DB);
 const searchQuery = Astro.url.searchParams.get('q') ?? '';
-const page = Math.max(1, parseInt(Astro.url.searchParams.get('page') ?? '1', 10));
+const page = Math.min(Math.max(1, parseInt(Astro.url.searchParams.get('page') ?? '1', 10) || 1), 1000);
 const perPage = 12;
 const offset = (page - 1) * perPage;
 
-const baseCondition = eq(research.status, 'complete');
+const conditions = searchQuery
+  ? and(eq(research.status, 'complete'), like(research.query, `%${escapeLikeWildcards(searchQuery)}%`))
+  : eq(research.status, 'complete');
 
 const allResearch = await db
   .select({
@@ -26,10 +29,7 @@ const allResearch = await db
     productCount: sql<number>`(SELECT COUNT(*) FROM products WHERE products.research_id = ${research.id})`,
   })
   .from(research)
-  .where(searchQuery
-    ? sql`${research.status} = 'complete' AND ${research.query} LIKE ${'%' + searchQuery + '%'}`
-    : baseCondition
-  )
+  .where(conditions)
   .orderBy(desc(research.createdAt))
   .limit(perPage)
   .offset(offset);
