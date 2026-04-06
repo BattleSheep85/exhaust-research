@@ -1,0 +1,25 @@
+{
+	"compatibility_date": "2026-04-06",
+	"compatibility_flags": ["global_fetch_strictly_public"],
+	"name": "exhaust-research",
+	"main": "@astrojs/cloudflare/entrypoints/server",
+	"assets": {
+		"directory": "./dist",
+		"binding": "ASSETS"
+	},
+	"observability": {
+		"enabled": true
+	},
+	"d1_databases": [
+		{
+			"binding": "DB",
+			"database_name": "exhaust-research-db",
+			"database_id": "PLACEHOLDER_REPLACE_AFTER_D1_CREATE"
+		}
+	],
+	"vars": {
+		"ANTHROPIC_API_KEY": ""
+	}
+	// Rate limiting: Configure via Cloudflare WAF dashboard
+	// Rule: /api/research — 10 requests per hour per IP
+}
