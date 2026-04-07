@@ -12,14 +12,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-
-      - name: Type check
-        run: npx -y typescript@latest --noEmit --strict --target esnext --moduleResolution bundler --types @cloudflare/workers-types
-
       - name: Build check
-        run: npx -y wrangler deploy --dry-run --outdir=dist
+        uses: cloudflare/wrangler-action@v3
+        with:
+          command: deploy --dry-run --outdir=dist
         env:
           ANTHROPIC_API_KEY: test-key-for-build
