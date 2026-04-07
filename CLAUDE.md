@@ -42,6 +42,8 @@ db/
 ## Secrets
 
 - `ANTHROPIC_API_KEY` — set via `wrangler secret put` only, NEVER in wrangler.jsonc
+- `TURNSTILE_SECRET_KEY` — optional, set via `wrangler secret put` to enable CAPTCHA
+- `TURNSTILE_SITE_KEY` — optional, set in wrangler.jsonc vars (public key)
 
 ## Key Design Decisions
 

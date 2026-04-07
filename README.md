@@ -16,7 +16,11 @@ Ask a product question. We scrape real sources (Reddit, forums, reviews), feed e
 - Shareable permalink for every research result
 - Application-level rate limiting
 - CSRF protection
-- Zero runtime dependencies — 42 KB deployed, pure TypeScript
+- Cloudflare Turnstile CAPTCHA (optional)
+- Mobile-responsive with hamburger menu
+- Accessible auto-refresh with pause control
+- Open Graph meta tags for social sharing
+- Zero runtime dependencies — ~48 KB deployed, pure TypeScript
 
 ## Stack
 
@@ -52,27 +56,48 @@ wrangler d1 execute exhaust-research-db --file=db/migrations/0000_init.sql
 # 3. Set API key (never stored in code)
 wrangler secret put ANTHROPIC_API_KEY
 
-# 4. Ship it
+# 4. (Optional) Enable CAPTCHA
+# Create a Turnstile widget at https://dash.cloudflare.com/turnstile
+# Set the site key in wrangler.jsonc TURNSTILE_SITE_KEY
+wrangler secret put TURNSTILE_SECRET_KEY
+
+# 5. Ship it
 wrangler deploy
 ```
 
+## Configuration
+
+| Variable | Type | Required | Description |
+|----------|------|----------|-------------|
+| `ANTHROPIC_API_KEY` | secret | Yes | Claude API key |
+| `AMAZON_AFFILIATE_TAG` | var | No | Amazon Associates tag (default: chrisputer-20) |
+| `TURNSTILE_SITE_KEY` | var | No | Cloudflare Turnstile site key (empty = disabled) |
+| `TURNSTILE_SECRET_KEY` | secret | No | Cloudflare Turnstile secret key |
+
 ## Project Structure
 
-11 TypeScript files. ~1,100 lines. That's the whole thing.
+11 TypeScript files. ~1,200 lines. That's the whole thing.
 
 ```
 src/
   worker.ts              Router + entry point
-  types.ts               Type definitions
+  types.ts               Type definitions + constants
   lib/html.ts            Template engine with XSS auto-escaping
   lib/utils.ts           ID generation, URL validation, helpers
   lib/scraper.ts         Reddit scraping
   lib/researcher.ts      Claude API integration + response validation
   pages/home.ts          Landing page
   pages/about.ts         About + affiliate disclosure
-  pages/api.ts           POST /api/research
+  pages/api.ts           POST /api/research + Turnstile verification
   pages/research-browse.ts  Browse/search
   pages/research-result.ts  Individual result page
+```
+
+## Development
+
+```bash
+wrangler dev                              # Local dev server (port 8787)
+wrangler deploy --dry-run --outdir=dist   # Build check
 ```
 
 ## License

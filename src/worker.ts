@@ -3,7 +3,7 @@ import { renderHome } from './pages/home';
 import { renderResearchResult } from './pages/research-result';
 import { renderBrowse } from './pages/research-browse';
 import { renderAbout } from './pages/about';
-import { handleResearchPost } from './pages/api';
+import { handleResearchPost, verifyTurnstile } from './pages/api';
 import { escapeHtml } from './lib/utils';
 import { layout } from './lib/html';
 
@@ -16,6 +16,10 @@ export default {
       // Static files
       if (path === '/favicon.svg') {
         return new Response(FAVICON_SVG, { headers: { 'Content-Type': 'image/svg+xml', 'Cache-Control': 'public, max-age=86400' } });
+      }
+
+      if (path === '/og-image.svg') {
+        return new Response(OG_IMAGE_SVG, { headers: { 'Content-Type': 'image/svg+xml', 'Cache-Control': 'public, max-age=86400' } });
       }
 
       // API routes
@@ -83,6 +87,22 @@ async function handleNewResearch(url: URL, env: Env, ctx: ExecutionContext): Pro
   const query = url.searchParams.get('q')?.trim();
   if (!query) return Response.redirect(new URL('/', url.origin).toString(), 302);
 
+  // Verify Turnstile if configured
+  if (env.TURNSTILE_SECRET_KEY) {
+    const token = url.searchParams.get('cf-turnstile-response') ?? '';
+    const ip = '127.0.0.1'; // Internal, Turnstile uses its own IP detection
+    if (!token || !(await verifyTurnstile(token, env.TURNSTILE_SECRET_KEY, ip))) {
+      return htmlResponse(
+        layout('Verification Failed', 'CAPTCHA verification failed.', `<div class="container empty">
+<h2>Verification failed</h2>
+<p>Please go back and try again.</p>
+<a href="/" class="btn" style="margin-top:1rem">Go home</a>
+</div>`),
+        403,
+      );
+    }
+  }
+
   const apiUrl = new URL('/api/research', url.origin);
 
   // Build a real request to our own handler (avoids internal fetch bypass)
@@ -129,3 +149,16 @@ function htmlResponse(body: string, status = 200): Response {
 }
 
 const FAVICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="6" fill="#2563eb"/><text x="16" y="22" font-family="system-ui,sans-serif" font-size="16" font-weight="800" fill="#fff" text-anchor="middle">ER</text></svg>`;
+
+const OG_IMAGE_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" width="1200" height="630">
+<rect width="1200" height="630" fill="#020617"/>
+<rect x="40" y="40" width="1120" height="550" rx="24" fill="#0f172a" stroke="#1e293b" stroke-width="2"/>
+<rect x="80" y="100" width="80" height="80" rx="16" fill="#2563eb"/>
+<text x="120" y="158" font-family="system-ui,sans-serif" font-size="40" font-weight="800" fill="#fff" text-anchor="middle">ER</text>
+<text x="180" y="155" font-family="system-ui,sans-serif" font-size="42" font-weight="700" fill="#f1f5f9">Exhaust Research</text>
+<text x="80" y="280" font-family="system-ui,sans-serif" font-size="52" font-weight="800" fill="#f1f5f9">AI-Powered Product Research</text>
+<text x="80" y="350" font-family="system-ui,sans-serif" font-size="28" fill="#94a3b8">Brutally honest comparisons from real sources.</text>
+<text x="80" y="400" font-family="system-ui,sans-serif" font-size="28" fill="#94a3b8">No fluff. No sponsored picks. Just the truth.</text>
+<rect x="80" y="460" width="200" height="56" rx="12" fill="#2563eb"/>
+<text x="180" y="496" font-family="system-ui,sans-serif" font-size="22" font-weight="600" fill="#fff" text-anchor="middle">Try it free</text>
+</svg>`;

@@ -1,5 +1,5 @@
 import type { Env, ResearchRow } from '../types';
-import { layout, html, raw } from '../lib/html';
+import { layout } from '../lib/html';
 import { timeAgo, escapeHtml, escapeLikeWildcards } from '../lib/utils';
 import { searchBar } from './home';
 
@@ -9,7 +9,7 @@ export async function renderBrowse(url: URL, env: Env): Promise<string> {
   const perPage = 12;
   const offset = (page - 1) * perPage;
 
-  let results: (ResearchRow & { product_count: number })[];
+  let rows: (ResearchRow & { product_count: number })[];
 
   if (searchQuery) {
     const escaped = `%${escapeLikeWildcards(searchQuery)}%`;
@@ -17,16 +17,19 @@ export async function renderBrowse(url: URL, env: Env): Promise<string> {
       `SELECT r.*, (SELECT COUNT(*) FROM products WHERE products.research_id = r.id) AS product_count
        FROM research r WHERE r.status = 'complete' AND r.query LIKE ?1
        ORDER BY r.created_at DESC LIMIT ?2 OFFSET ?3`
-    ).bind(escaped, perPage, offset);
-    results = (await stmt.all<ResearchRow & { product_count: number }>()).results ?? [];
+    ).bind(escaped, perPage + 1, offset);
+    rows = (await stmt.all<ResearchRow & { product_count: number }>()).results ?? [];
   } else {
     const stmt = env.DB.prepare(
       `SELECT r.*, (SELECT COUNT(*) FROM products WHERE products.research_id = r.id) AS product_count
        FROM research r WHERE r.status = 'complete'
        ORDER BY r.created_at DESC LIMIT ?1 OFFSET ?2`
-    ).bind(perPage, offset);
-    results = (await stmt.all<ResearchRow & { product_count: number }>()).results ?? [];
+    ).bind(perPage + 1, offset);
+    rows = (await stmt.all<ResearchRow & { product_count: number }>()).results ?? [];
   }
+
+  const hasMore = rows.length > perPage;
+  const results = rows.slice(0, perPage);
 
   const cards = results.map((r) => `<a href="/research/${escapeHtml(r.slug)}" class="card">
 <div class="card-top">
@@ -44,7 +47,7 @@ ${r.summary ? `<p>${escapeHtml(r.summary)}</p>` : ''}
 <div class="page-header" style="margin-bottom:2rem">
 <h1>Browse research</h1>
 <p style="color:var(--text2);margin-bottom:1.5rem">Explore past product research or start your own.</p>
-${searchBar('compact')}
+${searchBar('compact', env.TURNSTILE_SITE_KEY)}
 </div>
 
 ${searchQuery ? `<div style="margin-bottom:1.5rem;display:flex;align-items:center;gap:.5rem;font-size:.85rem">
@@ -59,11 +62,14 @@ ${cards ? `<div class="grid">${cards}</div>` : `<div class="empty">
 <p>Be the first to research a product!</p>
 </div>`}
 
-${results.length === perPage ? `<div class="pagination">
+${(page > 1 || hasMore) ? `<div class="pagination">
 ${page > 1 ? `<a href="/research?page=${page - 1}${qs}" class="btn btn-ghost">Previous</a>` : ''}
-<a href="/research?page=${page + 1}${qs}" class="btn btn-ghost">Next</a>
+${hasMore ? `<a href="/research?page=${page + 1}${qs}" class="btn btn-ghost">Next</a>` : ''}
 </div>` : ''}
 </div>`;
 
-  return layout('Browse Research', 'Explore past AI-powered product research.', body);
+  const turnstileScript = env.TURNSTILE_SITE_KEY
+    ? '<script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>'
+    : '';
+  return layout('Browse Research', 'Explore past AI-powered product research.', body, turnstileScript);
 }

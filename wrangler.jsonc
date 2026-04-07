@@ -12,7 +12,9 @@
 		}
 	],
 	"vars": {
-		"AMAZON_AFFILIATE_TAG": "chrisputer-20"
+		"AMAZON_AFFILIATE_TAG": "chrisputer-20",
+		"TURNSTILE_SITE_KEY": ""
 	}
 	// ANTHROPIC_API_KEY: Set via `wrangler secret put ANTHROPIC_API_KEY`
+	// TURNSTILE_SECRET_KEY: Set via `wrangler secret put TURNSTILE_SECRET_KEY`
 }

@@ -59,6 +59,7 @@ export async function runResearch(
 
   const response = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
+    signal: AbortSignal.timeout(60_000),
     headers: {
       'Content-Type': 'application/json',
       'x-api-key': apiKey,

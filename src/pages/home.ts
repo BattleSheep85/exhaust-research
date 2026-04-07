@@ -1,11 +1,14 @@
 import type { Env, ResearchRow } from '../types';
 import { layout, html, raw } from '../lib/html';
-import { timeAgo } from '../lib/utils';
+import { timeAgo, escapeHtml } from '../lib/utils';
 
-function searchBar(size: 'large' | 'compact' = 'large'): string {
+function searchBar(size: 'large' | 'compact' = 'large', turnstileSiteKey?: string): string {
   const ph = size === 'large'
     ? 'What product are you researching?'
     : 'Research a product...';
+  const turnstileWidget = turnstileSiteKey
+    ? `<div class="cf-turnstile" data-sitekey="${escapeHtml(turnstileSiteKey)}" data-theme="dark" data-size="compact" style="margin:0.75rem auto 0"></div>`
+    : '';
   return `<form action="/research/new" method="GET" class="search-form">
 <div class="search-glow"></div>
 <div class="search-box">
@@ -13,6 +16,7 @@ function searchBar(size: 'large' | 'compact' = 'large'): string {
 <input type="text" name="q" placeholder="${ph}" required aria-label="Search query">
 <button type="submit">Research</button>
 </div>
+${turnstileWidget}
 </form>`;
 }
 
@@ -21,7 +25,7 @@ export { searchBar };
 function researchCard(r: ResearchRow & { product_count: number }): string {
   return html`<a href="/research/${r.slug}" class="card">
 <div class="card-top">
-${raw(r.category ? `<span class="card-badge">${r.category}</span>` : '<span></span>')}
+${raw(r.category ? `<span class="card-badge">${escapeHtml(r.category)}</span>` : '<span></span>')}
 <span class="card-time">${timeAgo(r.created_at * 1000)}</span>
 </div>
 <h3>${r.query}</h3>
@@ -46,13 +50,14 @@ export async function renderHome(env: Env): Promise<string> {
 
   const recentCards = (recent.results ?? []).map(researchCard).join('');
   const popularCards = (popular.results ?? []).map(researchCard).join('');
+  const tsKey = env.TURNSTILE_SITE_KEY;
 
   const body = `
 <section class="hero container">
 <div class="badge">&#9889; Powered by AI</div>
 <h1>Product research, <em>exhausted.</em></h1>
 <p>We scrape dozens of sources, feed it all to AI, and give you brutally honest product comparisons. No fluff. No sponsored picks. Just the truth.</p>
-${searchBar('large')}
+${searchBar('large', tsKey)}
 <div class="try-links">
 <span>Try:</span>
 <a href="/research/new?q=best+mechanical+keyboard+under+100">mechanical keyboards</a>
@@ -96,9 +101,12 @@ ${popularCards ? `<section class="container" style="padding:3rem 1.5rem">
 <div class="cta">
 <h2>Stop guessing. Start knowing.</h2>
 <p>Every research result is saved and shareable.</p>
-${searchBar('compact')}
+${searchBar('compact', tsKey)}
 </div>
 </section>`;
 
-  return layout('AI-Powered Product Research', 'AI-powered product research that goes deeper than any search engine.', body);
+  const turnstileScript = tsKey
+    ? '<script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>'
+    : '';
+  return layout('AI-Powered Product Research', 'AI-powered product research that goes deeper than any search engine.', body, turnstileScript);
 }

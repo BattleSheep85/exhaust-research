@@ -1,4 +1,4 @@
-import type { Env } from '../types';
+import { type Env, DEFAULT_AFFILIATE_TAG } from '../types';
 import { generateId, generateSlug, sanitizeUrl, generateAffiliateUrl } from '../lib/utils';
 import { scrapeSearchResults } from '../lib/scraper';
 import { runResearch } from '../lib/researcher';
@@ -44,11 +44,15 @@ export async function handleResearchPost(request: Request, env: Env, ctx: Execut
       'INSERT INTO research (id, slug, query, status, created_at, view_count) VALUES (?1, ?2, ?3, ?4, ?5, 0)'
     ).bind(researchId, slug, query, 'processing', now).run();
   } catch {
-    // Slug collision — retry
+    // Slug collision — retry with fresh slug
     const slug2 = generateSlug(query);
-    await env.DB.prepare(
-      'INSERT INTO research (id, slug, query, status, created_at, view_count) VALUES (?1, ?2, ?3, ?4, ?5, 0)'
-    ).bind(researchId, slug2, query, 'processing', now).run();
+    try {
+      await env.DB.prepare(
+        'INSERT INTO research (id, slug, query, status, created_at, view_count) VALUES (?1, ?2, ?3, ?4, ?5, 0)'
+      ).bind(researchId, slug2, query, 'processing', now).run();
+    } catch {
+      return json({ error: 'Failed to create research. Please try again.' }, 500);
+    }
     ctx.waitUntil(executeResearch(env, researchId, query));
     return json({ slug: slug2 }, 201);
   }
@@ -61,7 +65,7 @@ async function executeResearch(env: Env, researchId: string, query: string): Pro
   try {
     const sources = await scrapeSearchResults(query);
     const result = await runResearch(env.ANTHROPIC_API_KEY, query, sources);
-    const affiliateTag = env.AMAZON_AFFILIATE_TAG || 'chrisputer-20';
+    const affiliateTag = env.AMAZON_AFFILIATE_TAG || DEFAULT_AFFILIATE_TAG;
     const now = Math.floor(Date.now() / 1000);
 
     // Batch insert products
@@ -93,6 +97,24 @@ async function executeResearch(env: Env, researchId: string, query: string): Pro
     } catch (e) {
       console.error('Failed to mark research failed:', e);
     }
+  }
+}
+
+interface TurnstileResponse {
+  success: boolean;
+}
+
+export async function verifyTurnstile(token: string, secretKey: string, ip: string): Promise<boolean> {
+  try {
+    const response = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ secret: secretKey, response: token, remoteip: ip }),
+    });
+    const data: TurnstileResponse = await response.json();
+    return data.success === true;
+  } catch {
+    return false;
   }
 }
 

@@ -18,7 +18,10 @@ async function scrapeReddit(query: string): Promise<ScrapedSource[]> {
     const url = `https://www.reddit.com/search.json?q=${encodeURIComponent(query)}&sort=relevance&t=year&limit=10`;
     const response = await fetch(url, {
       signal: AbortSignal.timeout(8000),
-      headers: { Accept: 'application/json' },
+      headers: {
+        Accept: 'application/json',
+        'User-Agent': 'ExhaustResearch/1.0 (product research bot)',
+      },
     });
     if (!response.ok) return [];
 

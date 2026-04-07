@@ -29,13 +29,22 @@ export function raw(s: string): { __html: string } {
 }
 
 export function layout(title: string, description: string, body: string, extra_head = ''): string {
+  const escapedTitle = escapeHtml(title);
+  const escapedDesc = escapeHtml(description);
   return `<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>${escapeHtml(title)} | Exhaust Research</title>
-<meta name="description" content="${escapeHtml(description)}">
+<title>${escapedTitle} | Exhaust Research</title>
+<meta name="description" content="${escapedDesc}">
+<meta property="og:title" content="${escapedTitle} | Exhaust Research">
+<meta property="og:description" content="${escapedDesc}">
+<meta property="og:type" content="website">
+<meta property="og:image" content="/og-image.svg">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="${escapedTitle} | Exhaust Research">
+<meta name="twitter:description" content="${escapedDesc}">
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -47,6 +56,9 @@ ${extra_head}
 <nav aria-label="Main navigation">
 <div class="nav-inner">
 <a href="/" class="logo"><span class="logo-mark">ER</span> Exhaust Research</a>
+<button class="nav-toggle" aria-label="Toggle menu" aria-expanded="false" onclick="const n=this.nextElementSibling;const o=n.classList.toggle('open');this.setAttribute('aria-expanded',o)">
+<span></span><span></span><span></span>
+</button>
 <div class="nav-links">
 <a href="/research">Browse</a>
 <a href="/about">About</a>
@@ -82,9 +94,16 @@ nav{border-bottom:1px solid var(--surface2);background:rgba(2,6,23,.85);backdrop
 .logo{display:flex;align-items:center;gap:.75rem;font-weight:700;font-size:1.1rem;color:var(--text)}
 .logo-mark{display:inline-flex;align-items:center;justify-content:center;width:2rem;height:2rem;border-radius:8px;background:var(--primary);color:#fff;font-size:.8rem;font-weight:800}
 .logo-mark.sm{width:1.5rem;height:1.5rem;font-size:.6rem;border-radius:6px}
+.nav-toggle{display:none;background:none;border:none;cursor:pointer;padding:.5rem;flex-direction:column;gap:4px}
+.nav-toggle span{display:block;width:20px;height:2px;background:var(--text2);border-radius:1px;transition:transform .2s,opacity .2s}
 .nav-links{display:flex;gap:1.5rem}
 .nav-links a{color:var(--text2);font-size:.9rem;font-weight:500}
 .nav-links a:hover{color:var(--text)}
+@media(max-width:480px){
+.nav-toggle{display:flex}
+.nav-links{display:none;position:absolute;top:4rem;right:0;left:0;background:var(--surface);border-bottom:1px solid var(--surface2);flex-direction:column;padding:1rem 1.5rem;gap:1rem}
+.nav-links.open{display:flex}
+}
 
 main{min-height:calc(100vh - 8rem)}
 footer{border-top:1px solid var(--surface2);padding:3rem 0;margin-top:auto}
@@ -200,4 +219,8 @@ footer{border-top:1px solid var(--surface2);padding:3rem 0;margin-top:auto}
 .sources{background:var(--surface);border:1px solid var(--surface2);border-radius:var(--radius);padding:1.5rem;margin-bottom:2rem}
 .sources h3{font-size:.8rem;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:.75rem}
 .sources a{font-size:.85rem;word-break:break-all;display:block;margin-bottom:.3rem}
+
+details>summary:focus-visible{outline:2px solid var(--primary);outline-offset:2px;border-radius:4px}
+.pause-btn{background:var(--surface2);color:var(--text2);border:1px solid var(--surface3);padding:.4rem .8rem;border-radius:8px;cursor:pointer;font-size:.85rem;font-family:var(--font);margin-top:.75rem}
+.pause-btn:hover{background:var(--surface3);color:var(--text)}
 `;

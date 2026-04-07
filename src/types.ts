@@ -2,6 +2,8 @@ export interface Env {
   DB: D1Database;
   ANTHROPIC_API_KEY: string;
   AMAZON_AFFILIATE_TAG: string;
+  TURNSTILE_SITE_KEY?: string;
+  TURNSTILE_SECRET_KEY?: string;
 }
 
 export interface ResearchRow {
@@ -50,6 +52,8 @@ export interface ResearchResult {
   products: ProductResult[];
   methodology: string;
 }
+
+export const DEFAULT_AFFILIATE_TAG = 'chrisputer-20';
 
 export interface ProductResult {
   name: string;

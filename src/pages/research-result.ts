@@ -1,5 +1,5 @@
-import type { Env, ResearchRow, ProductRow } from '../types';
-import { layout, html, raw } from '../lib/html';
+import { type Env, type ResearchRow, type ProductRow, DEFAULT_AFFILIATE_TAG } from '../types';
+import { layout, html } from '../lib/html';
 import { parseJsonSafe, isValidHttpUrl, escapeHtml } from '../lib/utils';
 import { searchBar } from './home';
 
@@ -31,7 +31,7 @@ ${p.brand ? `<p style="color:var(--text2);font-size:.85rem">${escapeHtml(p.brand
 </div>
 <div style="text-align:right;flex-shrink:0">
 ${p.price != null ? `<p class="product-price">$${p.price.toLocaleString()}</p>` : ''}
-${p.rating != null ? `<p class="product-rating">${'★'.repeat(Math.floor(p.rating))}${'☆'.repeat(5 - Math.floor(p.rating))} ${p.rating}</p>` : ''}
+${p.rating != null ? `<p class="product-rating"><span aria-hidden="true">${'★'.repeat(Math.floor(p.rating))}${'☆'.repeat(5 - Math.floor(p.rating))}</span> <span>${p.rating}/5</span></p>` : ''}
 </div>
 </div>
 ${p.best_for ? `<div class="product-bestfor">Best for: ${escapeHtml(p.best_for)}</div>` : ''}
@@ -42,7 +42,7 @@ ${cons.length > 0 ? `<div><h4 class="con">Cons</h4><ul class="con-list">${consHt
 </div>` : ''}
 ${specsHtml ? `<details><summary style="cursor:pointer;font-size:.85rem;color:var(--text3);font-weight:500">Specifications</summary>
 <dl style="display:grid;grid-template-columns:1fr 1fr;gap:.3rem .75rem;font-size:.85rem;margin-top:.75rem;background:rgba(30,41,59,.5);padding:.75rem;border-radius:8px">${specsHtml}</dl></details>` : ''}
-${url && isValidHttpUrl(url) ? `<a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer nofollow" class="btn" style="margin-top:1rem">View Deal &#8599;</a>` : ''}
+${url && isValidHttpUrl(url) ? `<a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer nofollow" class="btn" style="margin-top:1rem">View Deal <span aria-hidden="true">&#8599;</span></a>` : ''}
 </article>`;
 }
 
@@ -65,7 +65,7 @@ export async function renderResearchResult(slug: string, env: Env): Promise<Resp
   const sourceList = parseJsonSafe<string[]>(entry.sources, []).filter(isValidHttpUrl);
 
   const date = new Date(entry.created_at * 1000).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
-  const affiliateTag = env.AMAZON_AFFILIATE_TAG || 'chrisputer-20';
+  const affiliateTag = env.AMAZON_AFFILIATE_TAG || DEFAULT_AFFILIATE_TAG;
 
   const body = `<div class="container" style="max-width:64rem;padding:3rem 1.5rem">
 <a href="/research" class="back-link">&larr; All research</a>
@@ -79,10 +79,11 @@ ${entry.category ? `<span class="card-badge">${escapeHtml(entry.category)}</span
 </div>
 </div>
 
-${isProcessing ? `<div style="text-align:center;padding:3rem;background:var(--surface);border:1px solid rgba(37,99,235,.3);border-radius:var(--radius);margin:2rem 0">
+${isProcessing ? `<div id="processing" style="text-align:center;padding:3rem;background:var(--surface);border:1px solid rgba(37,99,235,.3);border-radius:var(--radius);margin:2rem 0">
 <div class="spinner"></div>
 <h2 style="font-size:1.25rem;font-weight:600;margin-bottom:.5rem">Researching...</h2>
 <p style="color:var(--text2)">Scraping sources and analyzing products. Usually 15-30 seconds.</p>
+<button id="pause-refresh" class="pause-btn" type="button">Pause auto-refresh</button>
 </div>` : ''}
 
 ${isFailed ? `<div style="padding:1.5rem;background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);border-radius:var(--radius);margin:2rem 0">
@@ -103,10 +104,26 @@ ${sourceList.length > 0 ? `<h3>Sources (${sourceList.length})</h3>${sourceList.m
 
 <div style="margin-top:3rem;padding-top:2rem;border-top:1px solid var(--surface2)">
 <h2 style="font-size:1.1rem;font-weight:600;margin-bottom:1rem">Research something else</h2>
-${searchBar('compact')}
+${searchBar('compact', env.TURNSTILE_SITE_KEY)}
 </div>
 </div>`;
 
-  const extra = isProcessing ? '<meta http-equiv="refresh" content="5">' : '';
-  return layout(entry.query, entry.summary ?? 'AI-powered product research', body, extra);
+  const turnstileScript = env.TURNSTILE_SITE_KEY
+    ? '<script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>'
+    : '';
+  const extra = isProcessing ? `<noscript><meta http-equiv="refresh" content="5"></noscript>
+<script>
+(function(){
+  var t=setInterval(function(){location.reload()},5000);
+  var btn=document.getElementById('pause-refresh');
+  if(!btn)return;
+  var paused=false;
+  btn.addEventListener('click',function(){
+    paused=!paused;
+    if(paused){clearInterval(t);btn.textContent='Resume auto-refresh'}
+    else{t=setInterval(function(){location.reload()},5000);btn.textContent='Pause auto-refresh'}
+  });
+})();
+</script>` : '';
+  return layout(entry.query, entry.summary ?? 'AI-powered product research', body, turnstileScript + extra);
 }

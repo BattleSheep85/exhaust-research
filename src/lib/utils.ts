@@ -3,11 +3,12 @@ export function generateId(): string {
 }
 
 export function slugify(text: string): string {
-  return text
+  const slug = text
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-|-$/g, '')
     .slice(0, 80);
+  return slug || 'research';
 }
 
 export function generateSlug(query: string): string {
