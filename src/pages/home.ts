@@ -105,8 +105,22 @@ ${searchBar('compact', tsKey)}
 </div>
 </section>`;
 
+  const websiteJsonLd = `<script type="application/ld+json">${JSON.stringify({
+    '@context': 'https://schema.org',
+    '@type': 'WebSite',
+    name: 'Exhaust Research',
+    url: 'https://chrisputer.tech',
+    description: 'AI-powered product research that goes deeper than any search engine.',
+    potentialAction: {
+      '@type': 'SearchAction',
+      target: 'https://chrisputer.tech/research/new?q={search_term_string}',
+      'query-input': 'required name=search_term_string',
+    },
+  })}</script>`;
+
+  const canonical = '<link rel="canonical" href="https://chrisputer.tech/">';
   const turnstileScript = tsKey
     ? '<script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>'
     : '';
-  return layout('AI-Powered Product Research', 'AI-powered product research that goes deeper than any search engine.', body, turnstileScript);
+  return layout('AI-Powered Product Research', 'AI-powered product research that goes deeper than any search engine.', body, canonical + websiteJsonLd + turnstileScript);
 }

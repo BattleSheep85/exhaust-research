@@ -108,6 +108,34 @@ ${searchBar('compact', env.TURNSTILE_SITE_KEY)}
 </div>
 </div>`;
 
+  // JSON-LD structured data for SEO
+  const isoDate = new Date(entry.created_at * 1000).toISOString();
+  const jsonLdProducts = products.map((p) => {
+    const item: Record<string, unknown> = {
+      '@type': 'Product',
+      name: p.name,
+    };
+    if (p.brand) item.brand = { '@type': 'Brand', name: p.brand };
+    if (p.price != null) item.offers = { '@type': 'Offer', price: p.price, priceCurrency: 'USD', availability: 'https://schema.org/InStock' };
+    if (p.rating != null) item.aggregateRating = { '@type': 'AggregateRating', ratingValue: p.rating, bestRating: 5, worstRating: 0 };
+    if (p.verdict) item.review = { '@type': 'Review', reviewBody: p.verdict, author: { '@type': 'Organization', name: 'Exhaust Research' } };
+    return item;
+  });
+
+  const jsonLd = JSON.stringify({
+    '@context': 'https://schema.org',
+    '@type': 'Article',
+    headline: entry.query,
+    description: entry.summary ?? '',
+    datePublished: isoDate,
+    author: { '@type': 'Organization', name: 'Exhaust Research', url: 'https://chrisputer.tech' },
+    ...(jsonLdProducts.length > 0 ? { about: jsonLdProducts } : {}),
+  });
+
+  const structuredData = entry.status === 'complete'
+    ? `<script type="application/ld+json">${jsonLd}</script>`
+    : '';
+
   const turnstileScript = env.TURNSTILE_SITE_KEY
     ? '<script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>'
     : '';
@@ -125,5 +153,6 @@ ${searchBar('compact', env.TURNSTILE_SITE_KEY)}
   });
 })();
 </script>` : '';
-  return layout(entry.query, entry.summary ?? 'AI-powered product research', body, turnstileScript + extra);
+  const canonical = `<link rel="canonical" href="https://chrisputer.tech/research/${escapeHtml(slug)}">`;
+  return layout(entry.query, entry.summary ?? 'AI-powered product research', body, canonical + structuredData + turnstileScript + extra);
 }

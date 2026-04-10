@@ -22,6 +22,16 @@ export default {
         return new Response(OG_IMAGE_SVG, { headers: { 'Content-Type': 'image/svg+xml', 'Cache-Control': 'public, max-age=86400' } });
       }
 
+      if (path === '/robots.txt') {
+        return new Response(`User-agent: *\nAllow: /\nDisallow: /api/\nDisallow: /research/new\n\nSitemap: ${url.origin}/sitemap.xml`, {
+          headers: { 'Content-Type': 'text/plain', 'Cache-Control': 'public, max-age=86400' },
+        });
+      }
+
+      if (path === '/sitemap.xml') {
+        return generateSitemap(url.origin, env);
+      }
+
       // API routes
       if (path === '/api/research' && request.method === 'POST') {
         return handleResearchPost(request, env, ctx);
@@ -139,6 +149,29 @@ async function handleNewResearch(url: URL, env: Env, ctx: ExecutionContext): Pro
 </div>`),
     result.status,
   );
+}
+
+async function generateSitemap(origin: string, env: Env): Promise<Response> {
+  const rows = await env.DB.prepare(
+    `SELECT slug, created_at FROM research WHERE status = 'complete' ORDER BY created_at DESC LIMIT 5000`
+  ).all<{ slug: string; created_at: number }>();
+
+  const entries = (rows.results ?? []).map((r) => {
+    const date = new Date(r.created_at * 1000).toISOString().split('T')[0];
+    return `<url><loc>${origin}/research/${r.slug}</loc><lastmod>${date}</lastmod><changefreq>monthly</changefreq></url>`;
+  }).join('\n');
+
+  const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+<url><loc>${origin}/</loc><changefreq>daily</changefreq><priority>1.0</priority></url>
+<url><loc>${origin}/research</loc><changefreq>daily</changefreq><priority>0.8</priority></url>
+<url><loc>${origin}/about</loc><changefreq>monthly</changefreq><priority>0.3</priority></url>
+${entries}
+</urlset>`;
+
+  return new Response(xml, {
+    headers: { 'Content-Type': 'application/xml', 'Cache-Control': 'public, max-age=3600' },
+  });
 }
 
 function htmlResponse(body: string, status = 200): Response {

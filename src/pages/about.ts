@@ -1,6 +1,7 @@
 import { layout } from '../lib/html';
 
 export function renderAbout(): string {
+  const canonical = '<link rel="canonical" href="https://chrisputer.tech/about">';
   return layout('About', 'About Exhaust Research — AI-powered product research.', `
 <div class="container prose" style="padding:4rem 1.5rem;max-width:48rem;margin:0 auto">
 <h1 style="font-size:2rem;font-weight:800;color:var(--text);margin-bottom:2rem">About Exhaust Research</h1>
@@ -25,5 +26,5 @@ export function renderAbout(): string {
 <h2>Transparency</h2>
 
 <p>This site uses Amazon Associates affiliate links. When you buy a product through one of our links, we earn a small commission at no extra cost to you. This helps keep the site running. Affiliate relationships never influence our product rankings or recommendations.</p>
-</div>`);
+</div>`, canonical);
 }
