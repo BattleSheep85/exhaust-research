@@ -128,7 +128,7 @@ ${searchBar('compact', env.TURNSTILE_SITE_KEY)}
     headline: entry.query,
     description: entry.summary ?? '',
     datePublished: isoDate,
-    author: { '@type': 'Organization', name: 'Exhaust Research', url: 'https://chrisputer.tech' },
+    author: { '@type': 'Organization', name: 'Exhaust Research', url: 'https://research.chrisputer.tech' },
     ...(jsonLdProducts.length > 0 ? { about: jsonLdProducts } : {}),
   });
 
@@ -153,6 +153,6 @@ ${searchBar('compact', env.TURNSTILE_SITE_KEY)}
   });
 })();
 </script>` : '';
-  const canonical = `<link rel="canonical" href="https://chrisputer.tech/research/${escapeHtml(slug)}">`;
+  const canonical = `<link rel="canonical" href="https://research.chrisputer.tech/research/${escapeHtml(slug)}">`;
   return layout(entry.query, entry.summary ?? 'AI-powered product research', body, canonical + structuredData + turnstileScript + extra);
 }

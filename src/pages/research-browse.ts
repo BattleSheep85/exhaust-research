@@ -68,7 +68,7 @@ ${hasMore ? `<a href="/research?page=${page + 1}${qs}" class="btn btn-ghost">Nex
 </div>` : ''}
 </div>`;
 
-  const canonical = '<link rel="canonical" href="https://chrisputer.tech/research">';
+  const canonical = '<link rel="canonical" href="https://research.chrisputer.tech/research">';
   const noindex = page > 1 ? '<meta name="robots" content="noindex, follow">' : '';
   const turnstileScript = env.TURNSTILE_SITE_KEY
     ? '<script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>'

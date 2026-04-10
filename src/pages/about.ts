@@ -1,7 +1,7 @@
 import { layout } from '../lib/html';
 
 export function renderAbout(): string {
-  const canonical = '<link rel="canonical" href="https://chrisputer.tech/about">';
+  const canonical = '<link rel="canonical" href="https://research.chrisputer.tech/about">';
   return layout('About', 'About Exhaust Research — AI-powered product research.', `
 <div class="container prose" style="padding:4rem 1.5rem;max-width:48rem;margin:0 auto">
 <h1 style="font-size:2rem;font-weight:800;color:var(--text);margin-bottom:2rem">About Exhaust Research</h1>
