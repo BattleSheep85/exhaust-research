@@ -1,6 +1,7 @@
 export interface Env {
   DB: D1Database;
   OPENROUTER_API_KEY: string;
+  BRAVE_API_KEY: string;
   AMAZON_AFFILIATE_TAG: string;
   TURNSTILE_SITE_KEY?: string;
   TURNSTILE_SECRET_KEY?: string;

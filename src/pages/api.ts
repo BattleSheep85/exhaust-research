@@ -6,7 +6,7 @@ import { runResearch } from '../lib/researcher';
 export async function handleResearchPost(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
   // CSRF: verify Origin
   const origin = request.headers.get('Origin');
-  const allowed = ['https://chrisputer.tech', 'http://localhost:8787'];
+  const allowed = ['https://research.chrisputer.tech', 'https://chrisputer.tech', 'http://localhost:8787'];
   if (origin && !allowed.includes(origin)) {
     return json({ error: 'Forbidden' }, 403);
   }
@@ -63,7 +63,7 @@ export async function handleResearchPost(request: Request, env: Env, ctx: Execut
 
 async function executeResearch(env: Env, researchId: string, query: string): Promise<void> {
   try {
-    const sources = await scrapeSearchResults(query);
+    const sources = await scrapeSearchResults(query, env.BRAVE_API_KEY);
     const result = await runResearch(env.OPENROUTER_API_KEY, query, sources);
     const affiliateTag = env.AMAZON_AFFILIATE_TAG || DEFAULT_AFFILIATE_TAG;
     const now = Math.floor(Date.now() / 1000);

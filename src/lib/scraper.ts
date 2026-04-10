@@ -1,5 +1,47 @@
 import type { ScrapedSource } from '../types';
 
+interface BraveWebResult {
+  title: string;
+  url: string;
+  description: string;
+  extra_snippets?: string[];
+}
+
+interface BraveSearchResponse {
+  web?: { results?: BraveWebResult[] };
+}
+
+async function scrapeBraveSearch(query: string, apiKey: string): Promise<ScrapedSource[]> {
+  try {
+    const params = new URLSearchParams({
+      q: query,
+      count: '10',
+      extra_snippets: '1',
+    });
+    const response = await fetch(`https://api.search.brave.com/res/v1/web/search?${params}`, {
+      signal: AbortSignal.timeout(8000),
+      headers: {
+        Accept: 'application/json',
+        'Accept-Encoding': 'gzip',
+        'X-Subscription-Token': apiKey,
+      },
+    });
+    if (!response.ok) return [];
+
+    const data: BraveSearchResponse = await response.json();
+    const results = data?.web?.results ?? [];
+
+    return results.slice(0, 8).map((r) => ({
+      url: r.url,
+      title: r.title,
+      content: [r.description, ...(r.extra_snippets ?? [])].join('\n\n'),
+      source: 'brave',
+    }));
+  } catch {
+    return [];
+  }
+}
+
 interface RedditResponse {
   data?: {
     children?: Array<{
@@ -42,11 +84,11 @@ async function scrapeReddit(query: string): Promise<ScrapedSource[]> {
   }
 }
 
-export async function scrapeSearchResults(query: string): Promise<ScrapedSource[]> {
+export async function scrapeSearchResults(query: string, braveApiKey: string): Promise<ScrapedSource[]> {
   const results = await Promise.allSettled([
+    scrapeBraveSearch(query, braveApiKey),
+    scrapeBraveSearch(`${query} review reddit`, braveApiKey),
     scrapeReddit(query),
-    scrapeReddit(`${query} review`),
-    scrapeReddit(`${query} vs`),
   ]);
 
   const sources: ScrapedSource[] = [];
