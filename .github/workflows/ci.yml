@@ -15,6 +15,7 @@ jobs:
       - name: Build check
         uses: cloudflare/wrangler-action@v3
         with:
+          wranglerVersion: "4"
           command: deploy --dry-run --outdir=dist
         env:
           ANTHROPIC_API_KEY: test-key-for-build
