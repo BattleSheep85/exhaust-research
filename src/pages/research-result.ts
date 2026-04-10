@@ -118,7 +118,7 @@ ${searchBar('compact', env.TURNSTILE_SITE_KEY)}
     if (p.brand) item.brand = { '@type': 'Brand', name: p.brand };
     if (p.price != null) item.offers = { '@type': 'Offer', price: p.price, priceCurrency: 'USD', availability: 'https://schema.org/InStock' };
     if (p.rating != null) item.aggregateRating = { '@type': 'AggregateRating', ratingValue: p.rating, bestRating: 5, worstRating: 0 };
-    if (p.verdict) item.review = { '@type': 'Review', reviewBody: p.verdict, author: { '@type': 'Organization', name: 'Exhaust Research' } };
+    if (p.verdict) item.review = { '@type': 'Review', reviewBody: p.verdict, author: { '@type': 'Organization', name: 'Exhaustive' } };
     return item;
   });
 
@@ -128,7 +128,7 @@ ${searchBar('compact', env.TURNSTILE_SITE_KEY)}
     headline: entry.query,
     description: entry.summary ?? '',
     datePublished: isoDate,
-    author: { '@type': 'Organization', name: 'Exhaust Research', url: 'https://research.chrisputer.tech' },
+    author: { '@type': 'Organization', name: 'Exhaustive', url: 'https://research.chrisputer.tech' },
     ...(jsonLdProducts.length > 0 ? { about: jsonLdProducts } : {}),
   });
 

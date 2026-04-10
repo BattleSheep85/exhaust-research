@@ -64,7 +64,7 @@ export async function handleResearchPost(request: Request, env: Env, ctx: Execut
 async function executeResearch(env: Env, researchId: string, query: string): Promise<void> {
   try {
     const sources = await scrapeSearchResults(query);
-    const result = await runResearch(env.ANTHROPIC_API_KEY, query, sources);
+    const result = await runResearch(env.OPENROUTER_API_KEY, query, sources);
     const affiliateTag = env.AMAZON_AFFILIATE_TAG || DEFAULT_AFFILIATE_TAG;
     const now = Math.floor(Date.now() / 1000);
 

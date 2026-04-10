@@ -36,14 +36,14 @@ export function layout(title: string, description: string, body: string, extra_h
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>${escapedTitle} | Exhaust Research</title>
+<title>${escapedTitle} | Exhaustive</title>
 <meta name="description" content="${escapedDesc}">
-<meta property="og:title" content="${escapedTitle} | Exhaust Research">
+<meta property="og:title" content="${escapedTitle} | Exhaustive">
 <meta property="og:description" content="${escapedDesc}">
 <meta property="og:type" content="website">
 <meta property="og:image" content="/og-image.svg">
 <meta name="twitter:card" content="summary">
-<meta name="twitter:title" content="${escapedTitle} | Exhaust Research">
+<meta name="twitter:title" content="${escapedTitle} | Exhaustive">
 <meta name="twitter:description" content="${escapedDesc}">
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -55,7 +55,7 @@ ${extra_head}
 <body>
 <nav aria-label="Main navigation">
 <div class="nav-inner">
-<a href="/" class="logo"><span class="logo-mark">ER</span> Exhaust Research</a>
+<a href="/" class="logo"><span class="logo-mark">Ex</span> Exhaustive</a>
 <button class="nav-toggle" aria-label="Toggle menu" aria-expanded="false" onclick="const n=this.nextElementSibling;const o=n.classList.toggle('open');this.setAttribute('aria-expanded',o)">
 <span></span><span></span><span></span>
 </button>
@@ -68,7 +68,7 @@ ${extra_head}
 <main>${body}</main>
 <footer>
 <div class="footer-inner">
-<span class="footer-brand"><span class="logo-mark sm">ER</span> Exhaust Research — AI-powered product intelligence</span>
+<span class="footer-brand"><span class="logo-mark sm">Ex</span> Exhaustive — every source, every angle, every detail</span>
 <p class="footer-note">Product data from public sources. Affiliate links may earn commission at no cost to you.</p>
 </div>
 </footer>

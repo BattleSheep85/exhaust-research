@@ -18,4 +18,4 @@ jobs:
           wranglerVersion: "4"
           command: deploy --dry-run --outdir=dist
         env:
-          ANTHROPIC_API_KEY: test-key-for-build
+          OPENROUTER_API_KEY: test-key-for-build

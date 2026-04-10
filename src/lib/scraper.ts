@@ -20,7 +20,7 @@ async function scrapeReddit(query: string): Promise<ScrapedSource[]> {
       signal: AbortSignal.timeout(8000),
       headers: {
         Accept: 'application/json',
-        'User-Agent': 'ExhaustResearch/1.0 (product research bot)',
+        'User-Agent': 'Exhaustive/1.0 (product research bot)',
       },
     });
     if (!response.ok) return [];

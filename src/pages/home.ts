@@ -55,8 +55,8 @@ export async function renderHome(env: Env): Promise<string> {
   const body = `
 <section class="hero container">
 <div class="badge">&#9889; Powered by AI</div>
-<h1>Product research, <em>exhausted.</em></h1>
-<p>We scrape dozens of sources, feed it all to AI, and give you brutally honest product comparisons. No fluff. No sponsored picks. Just the truth.</p>
+<h1>Product research, <em>exhaustive.</em></h1>
+<p>Every source. Every angle. Every detail. We scrape dozens of sources, feed it all to AI, and give you brutally honest product comparisons. Nothing left unturned.</p>
 ${searchBar('large', tsKey)}
 <div class="try-links">
 <span>Try:</span>
@@ -108,7 +108,7 @@ ${searchBar('compact', tsKey)}
   const websiteJsonLd = `<script type="application/ld+json">${JSON.stringify({
     '@context': 'https://schema.org',
     '@type': 'WebSite',
-    name: 'Exhaust Research',
+    name: 'Exhaustive',
     url: 'https://research.chrisputer.tech',
     description: 'AI-powered product research that goes deeper than any search engine.',
     potentialAction: {

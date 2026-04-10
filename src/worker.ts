@@ -181,14 +181,14 @@ function htmlResponse(body: string, status = 200): Response {
   });
 }
 
-const FAVICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="6" fill="#2563eb"/><text x="16" y="22" font-family="system-ui,sans-serif" font-size="16" font-weight="800" fill="#fff" text-anchor="middle">ER</text></svg>`;
+const FAVICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="6" fill="#2563eb"/><text x="16" y="22" font-family="system-ui,sans-serif" font-size="16" font-weight="800" fill="#fff" text-anchor="middle">Ex</text></svg>`;
 
 const OG_IMAGE_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" width="1200" height="630">
 <rect width="1200" height="630" fill="#020617"/>
 <rect x="40" y="40" width="1120" height="550" rx="24" fill="#0f172a" stroke="#1e293b" stroke-width="2"/>
 <rect x="80" y="100" width="80" height="80" rx="16" fill="#2563eb"/>
-<text x="120" y="158" font-family="system-ui,sans-serif" font-size="40" font-weight="800" fill="#fff" text-anchor="middle">ER</text>
-<text x="180" y="155" font-family="system-ui,sans-serif" font-size="42" font-weight="700" fill="#f1f5f9">Exhaust Research</text>
+<text x="120" y="158" font-family="system-ui,sans-serif" font-size="40" font-weight="800" fill="#fff" text-anchor="middle">Ex</text>
+<text x="180" y="155" font-family="system-ui,sans-serif" font-size="42" font-weight="700" fill="#f1f5f9">Exhaustive</text>
 <text x="80" y="280" font-family="system-ui,sans-serif" font-size="52" font-weight="800" fill="#f1f5f9">AI-Powered Product Research</text>
 <text x="80" y="350" font-family="system-ui,sans-serif" font-size="28" fill="#94a3b8">Brutally honest comparisons from real sources.</text>
 <text x="80" y="400" font-family="system-ui,sans-serif" font-size="28" fill="#94a3b8">No fluff. No sponsored picks. Just the truth.</text>

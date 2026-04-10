@@ -34,8 +34,8 @@ OUTPUT: Respond ONLY with valid JSON matching this schema:
   "methodology": "Sources analyzed and confidence level"
 }`;
 
-interface ClaudeResponse {
-  content: Array<{ type: string; text?: string }>;
+interface OpenRouterResponse {
+  choices: Array<{ message: { content: string } }>;
 }
 
 export async function runResearch(
@@ -57,19 +57,19 @@ export async function runResearch(
     budget -= line.length;
   }
 
-  const response = await fetch('https://api.anthropic.com/v1/messages', {
+  const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
     method: 'POST',
     signal: AbortSignal.timeout(60_000),
     headers: {
       'Content-Type': 'application/json',
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
+      Authorization: `Bearer ${apiKey}`,
+      'HTTP-Referer': 'https://research.chrisputer.tech',
+      'X-Title': 'Exhaustive',
     },
     body: JSON.stringify({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 4096,
-      system: SYSTEM_PROMPT,
+      model: 'x-ai/grok-4-fast:free',
       messages: [
+        { role: 'system', content: SYSTEM_PROMPT },
         {
           role: 'user',
           content: `Research query: "${query}"\n\nSource data:\n\n${lines.join('\n\n')}\n\nAnalyze and produce a product research report. Respond ONLY with valid JSON.`,
@@ -80,17 +80,17 @@ export async function runResearch(
 
   if (!response.ok) {
     const errText = await response.text();
-    throw new Error(`Claude API error ${response.status}: ${errText.slice(0, 200)}`);
+    throw new Error(`OpenRouter API error ${response.status}: ${errText.slice(0, 200)}`);
   }
 
-  const data: ClaudeResponse = await response.json();
-  const textBlock = data.content.find((b) => b.type === 'text');
-  if (!textBlock?.text) {
-    throw new Error('No text response from Claude');
+  const data: OpenRouterResponse = await response.json();
+  const content = data.choices?.[0]?.message?.content;
+  if (!content) {
+    throw new Error('No response from OpenRouter');
   }
 
   // Extract JSON (handle markdown code blocks)
-  let jsonStr = textBlock.text.trim();
+  let jsonStr = content.trim();
   const match = jsonStr.match(/```(?:json)?\s*([\s\S]*?)```/);
   if (match) jsonStr = match[1].trim();
 
@@ -98,7 +98,7 @@ export async function runResearch(
   try {
     parsed = JSON.parse(jsonStr);
   } catch {
-    throw new Error(`Invalid JSON from Claude: ${jsonStr.slice(0, 200)}`);
+    throw new Error(`Invalid JSON from model: ${jsonStr.slice(0, 200)}`);
   }
 
   return validateResearchResult(parsed);
