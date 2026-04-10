@@ -67,7 +67,7 @@ export async function runResearch(
       'X-Title': 'Exhaustive',
     },
     body: JSON.stringify({
-      model: 'x-ai/grok-4-fast:free',
+      model: 'google/gemini-2.5-flash',
       messages: [
         { role: 'system', content: SYSTEM_PROMPT },
         {
