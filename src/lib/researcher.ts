@@ -1,6 +1,7 @@
 import type { ScrapedSource, ResearchResult, ProductResult } from '../types';
 
-const MAX_SOURCE_CONTEXT = 30_000;
+const MAX_SOURCE_CONTEXT = 80_000;
+const CURRENT_YEAR = new Date().getUTCFullYear();
 
 const SYSTEM_PROMPT = `You are an expert product researcher. Analyze scraped product data and produce honest, actionable research reports.
 
@@ -11,6 +12,9 @@ RULES:
 - Include specific model numbers, prices, and specs when available.
 - If data is insufficient, say so clearly.
 - Rank products by overall recommendation, #1 being top pick.
+- PRIORITIZE RECENT DATA: The current year is ${CURRENT_YEAR}. Heavily weight sources tagged with recent dates (look for [X weeks ago], [X days ago], [${CURRENT_YEAR}]). Discount sources older than 18 months unless they're evergreen. Call out when the most recent reliable data is stale.
+- Note release dates and availability when known. Avoid recommending discontinued products.
+- Sources come from multiple types: web, news, video (YouTube reviews), hackernews. News and video sources are typically the most recent — lean on them for what's actually available today.
 
 OUTPUT: Respond ONLY with valid JSON matching this schema:
 {
@@ -47,11 +51,15 @@ export async function runResearch(
     throw new Error('No source data gathered');
   }
 
+  // Sort sources by recency priority — news/video first, then web, then HN
+  const priority: Record<string, number> = { news: 0, video: 1, web: 2, hackernews: 3 };
+  const sortedSources = [...sources].sort((a, b) => (priority[a.source] ?? 99) - (priority[b.source] ?? 99));
+
   // Build source context with budget
   let budget = MAX_SOURCE_CONTEXT;
   const lines: string[] = [];
-  for (let i = 0; i < sources.length && budget > 0; i++) {
-    const s = sources[i];
+  for (let i = 0; i < sortedSources.length && budget > 0; i++) {
+    const s = sortedSources[i];
     const line = `--- Source ${i + 1}: ${s.title} (${s.source}) ---\nURL: ${s.url}\n${s.content}`;
     lines.push(line.slice(0, budget));
     budget -= line.length;
