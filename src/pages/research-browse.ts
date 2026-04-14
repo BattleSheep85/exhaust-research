@@ -119,5 +119,5 @@ ${hasMore ? `<a href="/research?page=${page + 1}${qs}" class="btn btn-ghost">Nex
   const structuredData = `<script type="application/ld+json">${breadcrumbLd}</script>` +
     (itemListLd ? `<script type="application/ld+json">${itemListLd}</script>` : '');
 
-  return layout('Browse Research', 'Explore past AI-powered product research.', body, canonical + noindex + turnstileScript + structuredData);
+  return layout('Browse Research', 'Explore past AI-powered product research.', body, canonical + noindex + turnstileScript + structuredData, { ogUrl: 'https://chrisputer.tech/research' });
 }

@@ -55,5 +55,5 @@ export function renderAbout(): string {
 <p>This site uses Amazon Associates affiliate links. When you buy a product through one of our links, we earn a small commission at no extra cost to you. This helps keep the site running. Affiliate relationships never influence our product rankings or recommendations.</p>
 
 <p>Source code is intentionally zero-dependency — no npm, no package-lock, no node_modules. Every line is hand-written and auditable. That's a deliberate stance against supply-chain risk: you're reading a site where nothing was pulled from a registry that could be compromised.</p>
-</div>`, canonical + authorJsonLd);
+</div>`, canonical + authorJsonLd, { ogUrl: 'https://chrisputer.tech/about' });
 }

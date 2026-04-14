@@ -220,5 +220,5 @@ ${searchBar('compact', tsKey)}
   const turnstileScript = tsKey
     ? '<script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>'
     : '';
-  return layout('AI-Powered Product Research', 'AI-powered product research backed by 20 years of IT expertise.', body, canonical + websiteJsonLd + organizationJsonLd + turnstileScript);
+  return layout('AI-Powered Product Research', 'AI-powered product research backed by 20 years of IT expertise.', body, canonical + websiteJsonLd + organizationJsonLd + turnstileScript, { ogUrl: 'https://chrisputer.tech/' });
 }
