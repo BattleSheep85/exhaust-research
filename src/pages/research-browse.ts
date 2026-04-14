@@ -44,6 +44,11 @@ ${r.summary ? `<p>${escapeHtml(r.summary)}</p>` : ''}
   const qs = searchQuery ? `&q=${encodeURIComponent(searchQuery)}` : '';
 
   const body = `<div class="container" style="padding:3rem 1.5rem">
+<nav aria-label="Breadcrumb" class="breadcrumb" style="font-size:.85rem;color:var(--text2);margin-bottom:1rem">
+<a href="/" style="color:var(--text2)">Home</a>
+<span aria-hidden="true" style="margin:0 .4rem;color:var(--text3)">/</span>
+<span style="color:var(--text)">Research</span>
+</nav>
 <div class="page-header" style="margin-bottom:2rem">
 <h1>Browse research</h1>
 <p style="color:var(--text2);margin-bottom:1.5rem">Explore past product research or start your own.</p>

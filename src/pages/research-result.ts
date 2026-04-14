@@ -271,7 +271,13 @@ export async function renderResearchResult(slug: string, env: Env, fromQuery: st
   const shareUrl = encodeURIComponent(pageUrl);
 
   const body = `<div class="container" style="max-width:64rem;padding:3rem 1.5rem">
-<a href="/research" class="back-link">&larr; All research</a>
+<nav aria-label="Breadcrumb" class="breadcrumb" style="font-size:.85rem;color:var(--text2);margin-bottom:1rem">
+<a href="/" style="color:var(--text2)">Home</a>
+<span aria-hidden="true" style="margin:0 .4rem;color:var(--text3)">/</span>
+<a href="/research" style="color:var(--text2)">Research</a>
+<span aria-hidden="true" style="margin:0 .4rem;color:var(--text3)">/</span>
+<span style="color:var(--text)">${escapeHtml(entry.query)}</span>
+</nav>
 <div class="page-header">
 <h1>${escapeHtml(entry.query)}</h1>
 ${entry.category ? `<span class="card-badge">${escapeHtml(entry.category)}</span>` : ''}
