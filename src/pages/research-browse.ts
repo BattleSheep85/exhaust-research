@@ -77,8 +77,10 @@ ${searchQuery ? `<div style="margin-bottom:1.5rem;display:flex;align-items:cente
 
 ${cards ? `<div class="grid">${cards}</div>` : `<div class="empty">
 <div class="empty-icon"><svg width="32" height="32" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/></svg></div>
-<h2>No research yet</h2>
-<p>Be the first to research a product!</p>
+${searchQuery ? `<h2>No matches for &ldquo;${escapeHtml(searchQuery)}&rdquo;</h2>
+<p>Try a broader search or <a href="/research/new?q=${encodeURIComponent(searchQuery)}">start new research</a>.</p>` : page > 1 ? `<h2>You&rsquo;ve reached the end</h2>
+<p>No more research on this page. <a href="/research">Back to the latest</a>.</p>` : `<h2>No research yet</h2>
+<p>Be the first to research a product!</p>`}
 </div>`}
 
 ${(page > 1 || hasMore) ? `<div class="pagination">
