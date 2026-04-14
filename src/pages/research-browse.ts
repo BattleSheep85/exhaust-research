@@ -14,20 +14,30 @@ export async function renderBrowse(url: URL, env: Env): Promise<string> {
   if (searchQuery) {
     const escaped = `%${escapeLikeWildcards(searchQuery)}%`;
     const stmt = env.DB.prepare(
-      `SELECT r.*, (SELECT COUNT(*) FROM products WHERE products.research_id = r.id) AS product_count
-       FROM research r WHERE r.status = 'complete' AND r.query LIKE ?1
-         AND EXISTS (SELECT 1 FROM products p WHERE p.research_id = r.id)
-         AND LENGTH(r.query) >= 10 AND r.query LIKE '% %'
-       ORDER BY r.created_at DESC LIMIT ?2 OFFSET ?3`
+      `WITH ranked AS (
+         SELECT r.*, ROW_NUMBER() OVER (PARTITION BY COALESCE(r.canonical_query, r.slug) ORDER BY r.created_at DESC) AS rn
+         FROM research r
+         WHERE r.status = 'complete' AND r.query LIKE ?1
+           AND EXISTS (SELECT 1 FROM products p WHERE p.research_id = r.id)
+           AND LENGTH(r.query) >= 10 AND r.query LIKE '% %'
+       )
+       SELECT *, (SELECT COUNT(*) FROM products WHERE products.research_id = ranked.id) AS product_count
+       FROM ranked WHERE rn = 1
+       ORDER BY created_at DESC LIMIT ?2 OFFSET ?3`
     ).bind(escaped, perPage + 1, offset);
     rows = (await stmt.all<ResearchRow & { product_count: number }>()).results ?? [];
   } else {
     const stmt = env.DB.prepare(
-      `SELECT r.*, (SELECT COUNT(*) FROM products WHERE products.research_id = r.id) AS product_count
-       FROM research r WHERE r.status = 'complete'
-         AND EXISTS (SELECT 1 FROM products p WHERE p.research_id = r.id)
-         AND LENGTH(r.query) >= 10 AND r.query LIKE '% %'
-       ORDER BY r.created_at DESC LIMIT ?1 OFFSET ?2`
+      `WITH ranked AS (
+         SELECT r.*, ROW_NUMBER() OVER (PARTITION BY COALESCE(r.canonical_query, r.slug) ORDER BY r.created_at DESC) AS rn
+         FROM research r
+         WHERE r.status = 'complete'
+           AND EXISTS (SELECT 1 FROM products p WHERE p.research_id = r.id)
+           AND LENGTH(r.query) >= 10 AND r.query LIKE '% %'
+       )
+       SELECT *, (SELECT COUNT(*) FROM products WHERE products.research_id = ranked.id) AS product_count
+       FROM ranked WHERE rn = 1
+       ORDER BY created_at DESC LIMIT ?1 OFFSET ?2`
     ).bind(perPage + 1, offset);
     rows = (await stmt.all<ResearchRow & { product_count: number }>()).results ?? [];
   }

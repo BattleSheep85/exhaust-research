@@ -105,19 +105,29 @@ ${raw(r.summary ? html`<p>${r.summary}</p>` : '')}
 
 export async function renderHome(env: Env): Promise<string> {
   const recent = await env.DB.prepare(
-    `SELECT r.*, (SELECT COUNT(*) FROM products WHERE products.research_id = r.id) AS product_count
-     FROM research r WHERE r.status = 'complete'
-       AND EXISTS (SELECT 1 FROM products p WHERE p.research_id = r.id)
-       AND LENGTH(r.query) >= 10 AND r.query LIKE '% %'
-     ORDER BY r.created_at DESC LIMIT 6`
+    `WITH ranked AS (
+       SELECT r.*, ROW_NUMBER() OVER (PARTITION BY COALESCE(r.canonical_query, r.slug) ORDER BY r.created_at DESC) AS rn
+       FROM research r
+       WHERE r.status = 'complete'
+         AND EXISTS (SELECT 1 FROM products p WHERE p.research_id = r.id)
+         AND LENGTH(r.query) >= 10 AND r.query LIKE '% %'
+     )
+     SELECT *, (SELECT COUNT(*) FROM products WHERE products.research_id = ranked.id) AS product_count
+     FROM ranked WHERE rn = 1
+     ORDER BY created_at DESC LIMIT 6`
   ).all<ResearchRow & { product_count: number }>();
 
   const popular = await env.DB.prepare(
-    `SELECT r.*, (SELECT COUNT(*) FROM products WHERE products.research_id = r.id) AS product_count
-     FROM research r WHERE r.status = 'complete'
-       AND EXISTS (SELECT 1 FROM products p WHERE p.research_id = r.id)
-       AND LENGTH(r.query) >= 10 AND r.query LIKE '% %'
-     ORDER BY r.view_count DESC LIMIT 6`
+    `WITH ranked AS (
+       SELECT r.*, ROW_NUMBER() OVER (PARTITION BY COALESCE(r.canonical_query, r.slug) ORDER BY r.view_count DESC, r.created_at DESC) AS rn
+       FROM research r
+       WHERE r.status = 'complete'
+         AND EXISTS (SELECT 1 FROM products p WHERE p.research_id = r.id)
+         AND LENGTH(r.query) >= 10 AND r.query LIKE '% %'
+     )
+     SELECT *, (SELECT COUNT(*) FROM products WHERE products.research_id = ranked.id) AS product_count
+     FROM ranked WHERE rn = 1
+     ORDER BY view_count DESC LIMIT 6`
   ).all<ResearchRow & { product_count: number }>();
 
   const recentCards = (recent.results ?? []).map(researchCard).join('');

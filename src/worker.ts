@@ -300,12 +300,16 @@ async function generateSitemap(origin: string, env: Env): Promise<Response> {
   // (garbage queries, insufficient source data) are thin content and will hurt
   // ranking if Google crawls them.
   const rows = await env.DB.prepare(
-    `SELECT r.slug, r.created_at, COALESCE(r.completed_at, r.created_at) AS lastmod
-     FROM research r
-     WHERE r.status = 'complete'
-       AND EXISTS (SELECT 1 FROM products p WHERE p.research_id = r.id)
-       AND LENGTH(r.query) >= 10 AND r.query LIKE '% %'
-     ORDER BY r.created_at DESC
+    `WITH ranked AS (
+       SELECT r.slug, r.created_at, COALESCE(r.completed_at, r.created_at) AS lastmod,
+              ROW_NUMBER() OVER (PARTITION BY COALESCE(r.canonical_query, r.slug) ORDER BY r.created_at DESC) AS rn
+       FROM research r
+       WHERE r.status = 'complete'
+         AND EXISTS (SELECT 1 FROM products p WHERE p.research_id = r.id)
+         AND LENGTH(r.query) >= 10 AND r.query LIKE '% %'
+     )
+     SELECT slug, created_at, lastmod FROM ranked WHERE rn = 1
+     ORDER BY created_at DESC
      LIMIT 5000`
   ).all<{ slug: string; created_at: number; lastmod: number }>();
 
@@ -338,12 +342,16 @@ function escapeXml(s: string): string {
 
 async function generateAtomFeed(origin: string, env: Env): Promise<Response> {
   const rows = await env.DB.prepare(
-    `SELECT r.slug, r.query, r.summary, r.created_at, COALESCE(r.completed_at, r.created_at) AS updated
-     FROM research r
-     WHERE r.status = 'complete'
-       AND EXISTS (SELECT 1 FROM products p WHERE p.research_id = r.id)
-       AND LENGTH(r.query) >= 10 AND r.query LIKE '% %'
-     ORDER BY COALESCE(r.completed_at, r.created_at) DESC
+    `WITH ranked AS (
+       SELECT r.slug, r.query, r.summary, r.created_at, COALESCE(r.completed_at, r.created_at) AS updated,
+              ROW_NUMBER() OVER (PARTITION BY COALESCE(r.canonical_query, r.slug) ORDER BY r.created_at DESC) AS rn
+       FROM research r
+       WHERE r.status = 'complete'
+         AND EXISTS (SELECT 1 FROM products p WHERE p.research_id = r.id)
+         AND LENGTH(r.query) >= 10 AND r.query LIKE '% %'
+     )
+     SELECT slug, query, summary, created_at, updated FROM ranked WHERE rn = 1
+     ORDER BY updated DESC
      LIMIT 50`
   ).all<{ slug: string; query: string; summary: string | null; created_at: number; updated: number }>();
 
