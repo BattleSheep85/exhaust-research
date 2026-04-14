@@ -102,7 +102,7 @@ ${extra_head}
 <footer>
 <div class="footer-inner">
 <span class="footer-brand"><span class="logo-mark sm">CL</span> Chrisputer Labs — every source, every angle, every detail</span>
-<p class="footer-note">Product data from public sources. Affiliate links may earn commission at no cost to you.</p>
+<p class="footer-note">As an Amazon Associate, Chrisputer Labs earns from qualifying purchases. Product data compiled from public sources.</p>
 <p class="footer-note"><a href="/about">About</a> · <a href="/research">Browse</a> · <a href="/feed.xml" rel="alternate" type="application/atom+xml">Atom feed</a> · <a href="/sitemap.xml">Sitemap</a></p>
 </div>
 </footer>
