@@ -9,3 +9,10 @@ dist/
 
 # os
 .DS_Store
+
+# python test artifacts
+__pycache__/
+*.pyc
+
+# claude runtime
+.claude/scheduled_tasks.lock
