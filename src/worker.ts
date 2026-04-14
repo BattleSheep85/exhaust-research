@@ -367,15 +367,21 @@ async function generateSitemap(origin: string, env: Env): Promise<Response> {
      LIMIT 5000`
   ).all<{ slug: string; created_at: number; lastmod: number }>();
 
-  const entries = (rows.results ?? []).map((r) => {
+  const results = rows.results ?? [];
+  const entries = results.map((r) => {
     const date = new Date(r.lastmod * 1000).toISOString().split('T')[0];
     return `<url><loc>${origin}/research/${r.slug}</loc><lastmod>${date}</lastmod><changefreq>monthly</changefreq></url>`;
   }).join('\n');
 
+  // Home and /research are dynamic indexes — their lastmod is the newest
+  // research completion. Signals freshness to crawlers for recrawl scheduling.
+  const newestLastmod = results[0]?.lastmod;
+  const dynamicLastmod = newestLastmod ? `<lastmod>${new Date(newestLastmod * 1000).toISOString().split('T')[0]}</lastmod>` : '';
+
   const xml = `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-<url><loc>${origin}/</loc><changefreq>daily</changefreq><priority>1.0</priority></url>
-<url><loc>${origin}/research</loc><changefreq>daily</changefreq><priority>0.8</priority></url>
+<url><loc>${origin}/</loc>${dynamicLastmod}<changefreq>daily</changefreq><priority>1.0</priority></url>
+<url><loc>${origin}/research</loc>${dynamicLastmod}<changefreq>daily</changefreq><priority>0.8</priority></url>
 <url><loc>${origin}/about</loc><changefreq>monthly</changefreq><priority>0.3</priority></url>
 ${entries}
 </urlset>`;
