@@ -90,15 +90,18 @@ ${extra_head}
 <nav aria-label="Main navigation">
 <div class="nav-inner">
 <a href="/" class="logo"><span class="logo-mark">CL</span> Chrisputer Labs</a>
-<button class="nav-toggle" aria-label="Toggle menu" aria-expanded="false" onclick="const n=this.nextElementSibling;const o=n.classList.toggle('open');this.setAttribute('aria-expanded',o)">
+<button class="nav-toggle" aria-label="Toggle menu" aria-expanded="false" aria-controls="nav-links" onclick="const n=this.nextElementSibling;const o=n.classList.toggle('open');this.setAttribute('aria-expanded',o)">
 <span></span><span></span><span></span>
 </button>
-<div class="nav-links">
+<div class="nav-links" id="nav-links">
 <a href="/research">Browse</a>
 <a href="/about">About</a>
 </div>
 </div>
 </nav>
+<script>
+(function(){var t=document.querySelector('.nav-toggle'),l=document.getElementById('nav-links');if(!t||!l)return;function close(){l.classList.remove('open');t.setAttribute('aria-expanded','false')}document.addEventListener('click',function(e){if(!l.classList.contains('open'))return;if(t.contains(e.target)||l.contains(e.target))return;close()});document.addEventListener('keydown',function(e){if(e.key==='Escape'&&l.classList.contains('open')){close();t.focus()}});l.querySelectorAll('a').forEach(function(a){a.addEventListener('click',close)})})();
+</script>
 <main id="main">${body}</main>
 <footer>
 <div class="footer-inner">
