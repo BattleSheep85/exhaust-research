@@ -16,6 +16,7 @@ export async function renderBrowse(url: URL, env: Env): Promise<string> {
     const stmt = env.DB.prepare(
       `SELECT r.*, (SELECT COUNT(*) FROM products WHERE products.research_id = r.id) AS product_count
        FROM research r WHERE r.status = 'complete' AND r.query LIKE ?1
+         AND EXISTS (SELECT 1 FROM products p WHERE p.research_id = r.id)
        ORDER BY r.created_at DESC LIMIT ?2 OFFSET ?3`
     ).bind(escaped, perPage + 1, offset);
     rows = (await stmt.all<ResearchRow & { product_count: number }>()).results ?? [];
@@ -23,6 +24,7 @@ export async function renderBrowse(url: URL, env: Env): Promise<string> {
     const stmt = env.DB.prepare(
       `SELECT r.*, (SELECT COUNT(*) FROM products WHERE products.research_id = r.id) AS product_count
        FROM research r WHERE r.status = 'complete'
+         AND EXISTS (SELECT 1 FROM products p WHERE p.research_id = r.id)
        ORDER BY r.created_at DESC LIMIT ?1 OFFSET ?2`
     ).bind(perPage + 1, offset);
     rows = (await stmt.all<ResearchRow & { product_count: number }>()).results ?? [];
