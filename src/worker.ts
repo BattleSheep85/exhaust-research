@@ -327,7 +327,14 @@ function htmlResponse(body: string, status = 200, analyticsToken?: string, adsen
   if (analyticsToken) {
     out = out.replace('</body>', `<script defer src="https://static.cloudflareinsights.com/beacon.min.js" data-cf-beacon='{"token":"${analyticsToken}"}'></script></body>`);
   }
-  const headers: Record<string, string> = { 'Content-Type': 'text/html;charset=utf-8' };
+  const headers: Record<string, string> = {
+    'Content-Type': 'text/html;charset=utf-8',
+    'Strict-Transport-Security': 'max-age=31536000; includeSubDomains',
+    'X-Content-Type-Options': 'nosniff',
+    'Referrer-Policy': 'strict-origin-when-cross-origin',
+    'X-Frame-Options': 'DENY',
+    'Permissions-Policy': 'geolocation=(), microphone=(), camera=(), payment=()',
+  };
   if (lastModifiedSec) {
     headers['Last-Modified'] = new Date(lastModifiedSec * 1000).toUTCString();
   }
