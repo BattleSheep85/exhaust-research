@@ -90,7 +90,7 @@ ${extra_head}
 <nav aria-label="Main navigation">
 <div class="nav-inner">
 <a href="/" class="logo"><span class="logo-mark">CL</span> Chrisputer Labs</a>
-<button class="nav-toggle" aria-label="Toggle menu" aria-expanded="false" aria-controls="nav-links" onclick="const n=this.nextElementSibling;const o=n.classList.toggle('open');this.setAttribute('aria-expanded',o)">
+<button type="button" class="nav-toggle" aria-label="Toggle menu" aria-expanded="false" aria-controls="nav-links" onclick="const n=this.nextElementSibling;const o=n.classList.toggle('open');this.setAttribute('aria-expanded',o)">
 <span></span><span></span><span></span>
 </button>
 <div class="nav-links" id="nav-links">

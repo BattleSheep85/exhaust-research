@@ -1,6 +1,8 @@
 # Issues
 
-Last updated: 2026-04-14 (keep-improving R64)
+Last updated: 2026-04-14 (keep-improving R65)
+
+- [x] LOW: Non-submit `<button>` elements missing explicit `type="button"` (nav-toggle in `src/lib/html.ts`, copy-link + notify-btn in `src/pages/research-result.ts`). If any were ever placed inside a form they'd default to submit and trigger unwanted submissions. Resolved R65.
 
 - [x] LOW: TOC jump-links had instant no-scroll behavior and headings hit viewport top with no margin (`src/lib/html.ts`). Added `html{scroll-behavior:smooth}` with `prefers-reduced-motion` fallback and `scroll-margin-top:1rem` on headings with ids. Resolved R64.
 
