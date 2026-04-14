@@ -13,6 +13,10 @@ import { getTierConfig, isValidTier } from './lib/research-config';
 // (home: 5m, research result: 1h) so bumping is a soft cutover, not a purge.
 const CACHE_VERSION = 'v32';
 
+// Update when /about page content materially changes. Signals freshness to
+// crawlers so the page gets re-crawled after structured-data or copy edits.
+const ABOUT_LASTMOD = '2026-04-14';
+
 // Baseline security headers applied to every response (HTML, JSON, redirects,
 // static assets). HTML pages add a stricter CSP on top in htmlResponse(); these
 // are the universal defaults that should never be missing — previously API
@@ -480,7 +484,7 @@ async function generateSitemap(origin: string, env: Env, ifModifiedSince: string
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
 <url><loc>${origin}/</loc>${dynamicLastmod}<changefreq>daily</changefreq><priority>1.0</priority></url>
 <url><loc>${origin}/research</loc>${dynamicLastmod}<changefreq>daily</changefreq><priority>0.8</priority></url>
-<url><loc>${origin}/about</loc><changefreq>monthly</changefreq><priority>0.3</priority></url>
+<url><loc>${origin}/about</loc><lastmod>${ABOUT_LASTMOD}</lastmod><changefreq>monthly</changefreq><priority>0.3</priority></url>
 ${entries}
 </urlset>`;
 

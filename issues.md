@@ -1,6 +1,8 @@
 # Issues
 
-Last updated: 2026-04-14 (keep-improving R82)
+Last updated: 2026-04-14 (keep-improving R83)
+
+- [x] LOW: Sitemap `/about` entry had no `<lastmod>` (`src/worker.ts`). Crawlers rely on lastmod to schedule recrawls; without it, recent changes to /about (R80 breadcrumb, R82 JSON-LD graph closure) won't get re-indexed promptly. Added `ABOUT_LASTMOD` constant (current date 2026-04-14) with comment noting it should be bumped when /about materially changes. Verified live via cache-busted fetch. Resolved R83.
 
 - [x] LOW: Cross-page JSON-LD `@id` graph was broken — R81's Organization `founder.@id: https://chrisputer.tech/about#chris` pointed at an entity the AboutPage never defined (`src/pages/about.ts`), and the new home WebSite had no `@id` so other pages couldn't reference it. Added `@id` to AboutPage (self), `@id` to the Person, `@id` to WebSite (`src/pages/home.ts`), wired `isPartOf: #website` + `about: #organization` on AboutPage, and enriched Person with `knowsAbout` and `alumniOf: U.S. Army`. Also added `inLanguage: en-US` on WebSite. Now the graph closes: Organization.founder → AboutPage.mainEntity; AboutPage.isPartOf → WebSite; AboutPage.about → Organization; Organization.founder.worksFor → Organization (self-loop OK). Bumped CACHE_VERSION v31 → v32. Resolved R82.
 
