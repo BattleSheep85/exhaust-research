@@ -204,7 +204,10 @@ ${searchBar('compact', tsKey)}
     publisher: { '@id': 'https://chrisputer.tech/#organization' },
     potentialAction: {
       '@type': 'SearchAction',
-      target: 'https://chrisputer.tech/research/new?q={search_term_string}',
+      target: {
+        '@type': 'EntryPoint',
+        urlTemplate: 'https://chrisputer.tech/research?q={search_term_string}',
+      },
       'query-input': 'required name=search_term_string',
     },
   })}</script>`;
