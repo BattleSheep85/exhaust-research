@@ -1,6 +1,6 @@
 import type { Env, ResearchRow } from '../types';
 import { layout } from '../lib/html';
-import { timeAgo, escapeHtml, escapeLikeWildcards } from '../lib/utils';
+import { timeAgo, escapeHtml, escapeLikeWildcards, displayQuery } from '../lib/utils';
 import { searchBar } from './home';
 
 export async function renderBrowse(url: URL, env: Env): Promise<string> {
@@ -50,7 +50,7 @@ export async function renderBrowse(url: URL, env: Env): Promise<string> {
 ${r.category ? `<span class="card-badge">${escapeHtml(r.category)}</span>` : '<span></span>'}
 <span class="card-time">${timeAgo(r.created_at * 1000)}</span>
 </div>
-<h3>${escapeHtml(r.query)}</h3>
+<h3>${escapeHtml(displayQuery(r.query))}</h3>
 ${r.summary ? `<p>${escapeHtml(r.summary)}</p>` : ''}
 <div class="card-meta"><span>${r.product_count} products</span><span>${r.view_count} views</span></div>
 </a>`).join('');
@@ -112,7 +112,7 @@ ${hasMore ? `<a href="/research?page=${page + 1}${qs}" class="btn btn-ghost">Nex
         '@type': 'ListItem',
         position: offset + i + 1,
         url: `https://chrisputer.tech/research/${r.slug}`,
-        name: r.query,
+        name: displayQuery(r.query),
       })),
     },
   }) : '';

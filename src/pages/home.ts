@@ -1,6 +1,6 @@
 import type { Env, ResearchRow } from '../types';
 import { layout, html, raw } from '../lib/html';
-import { timeAgo, escapeHtml } from '../lib/utils';
+import { timeAgo, escapeHtml, displayQuery } from '../lib/utils';
 
 function searchBar(size: 'large' | 'compact' = 'large', turnstileSiteKey?: string): string {
   const ph = size === 'large'
@@ -94,7 +94,7 @@ function researchCard(r: ResearchRow & { product_count: number }): string {
 ${raw(r.category ? `<span class="card-badge">${escapeHtml(r.category)}</span>` : '<span></span>')}
 <span class="card-time">${timeAgo(r.created_at * 1000)}</span>
 </div>
-<h3>${r.query}</h3>
+<h3>${displayQuery(r.query)}</h3>
 ${raw(r.summary ? html`<p>${r.summary}</p>` : '')}
 <div class="card-meta">
 <span>${r.product_count} products</span>

@@ -4,14 +4,14 @@ import { renderResearchResult } from './pages/research-result';
 import { renderBrowse } from './pages/research-browse';
 import { renderAbout } from './pages/about';
 import { handleResearchPost, handleResearchEvents, handleSearchSuggest, handleSubscribe, verifyTurnstile } from './pages/api';
-import { escapeHtml } from './lib/utils';
+import { escapeHtml, displayQuery } from './lib/utils';
 import { layout } from './lib/html';
 import { getTierConfig, isValidTier } from './lib/research-config';
 
 // Bump when the page template/schema shape changes in a way that should
 // invalidate every cached HTML blob. Old keys age out on their own TTL
 // (home: 5m, research result: 1h) so bumping is a soft cutover, not a purge.
-const CACHE_VERSION = 'v8';
+const CACHE_VERSION = 'v9';
 
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
@@ -284,7 +284,8 @@ async function generateOgImage(slug: string, env: Env): Promise<Response> {
     return new Response(OG_IMAGE_SVG, { headers: { 'Content-Type': 'image/svg+xml', 'Cache-Control': 'public, max-age=86400' } });
   }
 
-  const title = escapeHtml(row.query.length > 60 ? row.query.slice(0, 57) + '...' : row.query);
+  const pretty = displayQuery(row.query);
+  const title = escapeHtml(pretty.length > 60 ? pretty.slice(0, 57) + '...' : pretty);
   const category = row.category ? escapeHtml(row.category) : '';
   const subtitle = row.product_count > 0
     ? `${row.product_count} products compared`
@@ -387,7 +388,7 @@ async function generateAtomFeed(origin: string, env: Env): Promise<Response> {
     const summary = r.summary ? escapeXml(r.summary.slice(0, 500)) : '';
     return `<entry>
 <id>${link}</id>
-<title>${escapeXml(r.query)}</title>
+<title>${escapeXml(displayQuery(r.query))}</title>
 <link href="${link}"/>
 <published>${published}</published>
 <updated>${updated}</updated>

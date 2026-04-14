@@ -376,7 +376,7 @@ ${related.length > 0 ? `<section class="related-research" style="margin-top:3rem
 <h2 style="font-size:1.1rem;font-weight:600;margin-bottom:1rem">Related research</h2>
 <div class="grid">${related.map((r) => `<a class="card" href="/research/${escapeHtml(r.slug)}">
 ${r.category ? `<div class="card-top"><span class="card-badge">${escapeHtml(r.category)}</span><span class="card-time">${timeAgo(r.created_at * 1000)}</span></div>` : `<div class="card-top"><span class="card-time">${timeAgo(r.created_at * 1000)}</span></div>`}
-<h3>${escapeHtml(r.query)}</h3>
+<h3>${escapeHtml(displayQuery(r.query))}</h3>
 </a>`).join('')}</div>
 </section>` : ''}
 
