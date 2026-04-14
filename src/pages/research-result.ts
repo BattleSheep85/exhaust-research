@@ -379,8 +379,8 @@ ${products.length > 0 ? `<h2 id="products" style="font-size:1.25rem;font-weight:
 <div class="product-grid">${products.map((p, i) => renderProduct(p, i, affiliateTag, walmartId, isService)).join('')}</div>` : ''}
 
 ${(resultData.methodology || sourceList.length > 0) ? `<div class="sources" style="margin-top:2rem">
-${resultData.methodology ? `<h3 id="methodology">Methodology</h3><p style="font-size:.85rem;color:var(--text2);margin-bottom:1rem">${escapeHtml(resultData.methodology)}</p>` : ''}
-${sourceList.length > 0 ? `<h3 id="sources">Sources (${sourceList.length})</h3>${sourceList.map((u) => `<a href="${escapeHtml(u)}" target="_blank" rel="${sourceRel(u)}">${escapeHtml(sourceLabel(u))}</a>`).join('')}` : ''}
+${resultData.methodology ? `<h2 id="methodology" style="font-size:1.1rem;font-weight:600;margin-bottom:.5rem">Methodology</h2><p style="font-size:.85rem;color:var(--text2);margin-bottom:1rem">${escapeHtml(resultData.methodology)}</p>` : ''}
+${sourceList.length > 0 ? `<h2 id="sources" style="font-size:1.1rem;font-weight:600;margin-bottom:.5rem">Sources (${sourceList.length})</h2>${sourceList.map((u) => `<a href="${escapeHtml(u)}" target="_blank" rel="${sourceRel(u)}">${escapeHtml(sourceLabel(u))}</a>`).join('')}` : ''}
 </div>` : ''}
 
 ${related.length > 0 ? `<section class="related-research" style="margin-top:3rem;padding-top:2rem;border-top:1px solid var(--surface2)">

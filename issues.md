@@ -1,8 +1,9 @@
 # Issues
 
-Last updated: 2026-04-14 (keep-improving R61)
+Last updated: 2026-04-14 (keep-improving R62)
 
 - [x] LOW: Sitemap + Atom feed missing Last-Modified / 304 handling (`src/worker.ts`) — resolved R61: both endpoints now emit `Last-Modified` and return 304 Not Modified for conditional requests (verified live).
+- [x] LOW: Research-result heading outline broken — Methodology/Sources were h3 directly under h2 Products with no intervening structure, skipping levels. Promoted to h2 (`src/pages/research-result.ts`). Fixes HTML5 outline hierarchy for a11y/SEO. Resolved R62.
 
 ## SEO / Affiliate Surface (from discovery loop #2, 2026-04-14)
 
