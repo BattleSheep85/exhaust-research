@@ -378,14 +378,27 @@ ${searchBar('compact', env.TURNSTILE_SITE_KEY)}
 
   // JSON-LD structured data for SEO
   const isoDate = new Date(entry.created_at * 1000).toISOString();
+  // priceValidUntil: 30 days from page's last completion (Google Product rich-snippet requirement)
+  const priceValidUntil = new Date((lastModifiedTs + 30 * 86400) * 1000).toISOString().split('T')[0];
   const jsonLdProducts = products.map((p) => {
     const item: Record<string, unknown> = {
       '@type': 'Product',
       name: p.name,
     };
     if (p.brand) item.brand = { '@type': 'Brand', name: p.brand };
-    if (p.price != null) item.offers = { '@type': 'Offer', price: p.price, priceCurrency: 'USD', availability: 'https://schema.org/InStock' };
-    if (p.rating != null) item.aggregateRating = { '@type': 'AggregateRating', ratingValue: p.rating, bestRating: 5, worstRating: 0 };
+    if (p.price != null) {
+      const offer: Record<string, unknown> = {
+        '@type': 'Offer',
+        price: p.price,
+        priceCurrency: 'USD',
+        availability: 'https://schema.org/InStock',
+        priceValidUntil,
+        url: pageUrl,
+        seller: { '@type': 'Organization', name: 'Chrisputer Labs' },
+      };
+      item.offers = offer;
+    }
+    if (p.rating != null) item.aggregateRating = { '@type': 'AggregateRating', ratingValue: p.rating, bestRating: 5, worstRating: 0, reviewCount: 1 };
     if (p.verdict) item.review = { '@type': 'Review', reviewBody: p.verdict, author: { '@type': 'Organization', name: 'Chrisputer Labs' } };
     return item;
   });
