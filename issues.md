@@ -1,6 +1,8 @@
 # Issues
 
-Last updated: 2026-04-14 (keep-improving R75)
+Last updated: 2026-04-14 (keep-improving R76)
+
+- [x] MED: API paths (`/api/research`, `/api/subscribe`, etc.) returned the 20KB HTML 404 page when hit with the wrong method or a typo'd subpath (`src/worker.ts`). API consumers (curl, fetch, monitors, link checkers) want JSON. Now returns `405 + Allow:` for known routes with wrong method, `404 + JSON body` for unknown `/api/*` paths. Eliminates ~20KB-per-request waste and gives clients a parseable error. Resolved R76.
 
 - [x] MED: `/favicon.ico`, `/apple-touch-icon.png`, and `/apple-touch-icon-precomposed.png` returned 404s with the full ~20KB error page (`src/worker.ts`). Browsers, RSS readers, Slack/iMessage unfurlers, and link checkers request these convention paths regardless of `<link rel="icon">`. Now 301-redirect to `/favicon.svg` with 30-day immutable cache, so each requester pays the redirect once. Eliminates noisy 404s in CF analytics and saves ~20KB per drive-by request. Resolved R75.
 

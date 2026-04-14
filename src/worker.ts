@@ -134,6 +134,29 @@ async function handleRequest(request: Request, env: Env, ctx: ExecutionContext):
         return handleSubscribe(request, env);
       }
 
+      // Any other /api/* path: return JSON, not the 20KB HTML 404 page.
+      // Distinguish 405 (route exists, wrong method) from 404 (no such route)
+      // so clients and curl users get a meaningful answer.
+      if (path.startsWith('/api/')) {
+        const knownRoutes: Array<{ pattern: RegExp; methods: string[] }> = [
+          { pattern: /^\/api\/research$/, methods: ['POST'] },
+          { pattern: /^\/api\/research\/[a-z0-9-]+\/events$/, methods: ['GET'] },
+          { pattern: /^\/api\/search\/suggest$/, methods: ['GET'] },
+          { pattern: /^\/api\/subscribe$/, methods: ['POST'] },
+        ];
+        const match = knownRoutes.find((r) => r.pattern.test(path));
+        if (match) {
+          return new Response(
+            JSON.stringify({ error: 'Method Not Allowed', allow: match.methods }),
+            { status: 405, headers: { 'Content-Type': 'application/json', Allow: match.methods.join(', ') } },
+          );
+        }
+        return new Response(
+          JSON.stringify({ error: 'Not Found' }),
+          { status: 404, headers: { 'Content-Type': 'application/json' } },
+        );
+      }
+
       // Page routes: accept GET and HEAD. HEAD is transformed to a bodyless
       // response by the outer wrapper in `fetch`, so the handler can treat it
       // identically to GET.
