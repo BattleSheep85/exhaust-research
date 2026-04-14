@@ -1,6 +1,8 @@
 # Issues
 
-Last updated: 2026-04-14 (keep-improving R63)
+Last updated: 2026-04-14 (keep-improving R64)
+
+- [x] LOW: TOC jump-links had instant no-scroll behavior and headings hit viewport top with no margin (`src/lib/html.ts`). Added `html{scroll-behavior:smooth}` with `prefers-reduced-motion` fallback and `scroll-margin-top:1rem` on headings with ids. Resolved R64.
 
 - [x] LOW: Research-result pages had no in-page Table of Contents despite having 5-6 anchor-linked sections (`src/pages/research-result.ts`). Added a conditional TOC nav that only renders when there are 3+ sections. Improves long-form skimmability and gives Google a signal for "Jump to" sitelinks. Resolved R63.
 

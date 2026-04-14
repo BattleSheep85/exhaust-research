@@ -116,6 +116,10 @@ ${extra_head}
 
 const CSS = `
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+@media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
+:target{scroll-margin-top:1rem}
+h1[id],h2[id],h3[id],section[id]{scroll-margin-top:1rem}
 :root{
   --bg:#020617;--surface:#0f172a;--surface2:#1e293b;--surface3:#334155;
   --text:#f1f5f9;--text2:#94a3b8;--text3:#64748b;
