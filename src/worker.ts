@@ -337,6 +337,7 @@ function htmlResponse(body: string, status = 200, analyticsToken?: string, adsen
   };
   if (lastModifiedSec) {
     headers['Last-Modified'] = new Date(lastModifiedSec * 1000).toUTCString();
+    headers['Cache-Control'] = 'public, max-age=300, s-maxage=3600, stale-while-revalidate=86400';
   }
   return new Response(out, { status, headers });
 }
