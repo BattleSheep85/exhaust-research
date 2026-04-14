@@ -37,6 +37,14 @@ export async function handleResearchPost(request: Request, env: Env, ctx: Execut
   if (query.length < 3 || query.length > 500) {
     return json({ error: 'Query must be 3-500 characters' }, 400);
   }
+  // Reject obvious bot / spam / test patterns
+  const tokenCount = query.split(/\s+/).filter((t) => t.length > 0).length;
+  if (tokenCount < 2) {
+    return json({ error: 'Please describe what you want to research (at least two words).' }, 400);
+  }
+  if (/\{[^}]+\}/.test(query)) {
+    return json({ error: 'Query contains an unresolved template placeholder.' }, 400);
+  }
 
   const tier: Tier = (typeof body.tier === 'string' && isValidTier(body.tier)) ? body.tier : 'instant';
   const config = getTierConfig(tier);
