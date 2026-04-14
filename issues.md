@@ -94,6 +94,7 @@ Plus 1500ms post-complete delay + full page reload at the end.
 - [x] MEDIUM: HEAD requests return 405 on every route — wrapped the worker `fetch` so HEAD runs the GET handler and the body is stripped at the outer layer; router accepts both methods. Verified live: HEAD returns 200 with headers + 0 bytes.
 - [x] MEDIUM: Sitemap exposes thin-content slugs (honest-no-data results, garbage queries). Filtered `generateSitemap` to only include research with at least 1 product via `EXISTS` subquery; verified live sitemap no longer contains garbage-query slugs.
 - [x] HIGH: Second stored XSS in activity feed — `div.innerHTML=(icons[e.event_type]||'\u{25CF}')+' '+e.message` at `src/pages/research-result.ts:443`. `engine.ts:588` interpolates user query into event messages (e.g. `Searching brave: "<query>"`), which render raw during research processing. Any visitor watching the live feed of a maliciously-crafted query would execute the payload. Switched to `textContent` so icon + message are treated as literal text.
+- [x] MEDIUM: No Content-Security-Policy header — the two XSS bugs above would have been defense-in-depth blocked by a CSP. Added CSP from `htmlResponse()` covering script-src/style-src/font-src/img-src/connect-src/frame-src plus lockdowns (`object-src 'none'`, `base-uri 'self'`, `form-action 'self'`, `frame-ancestors 'none'`, `upgrade-insecure-requests`). Allowlist covers Turnstile, CF analytics beacon, AdSense, Google Fonts. `'unsafe-inline'` kept for scripts/styles since the app embeds JSON-LD and small inline scripts and KV caching rules out per-request nonces — tracked as known limitation.
 
 ## Known Limitations (accepted)
 
@@ -101,3 +102,4 @@ Plus 1500ms post-complete delay + full page reload at the end.
 - MEDIUM: CSRF Origin check has hardcoded domain (chrisputer.tech) — update if domain changes
 - LOW: View count has no deduplication (bots inflate counts)
 - LOW: Hamburger menu does not close on outside click
+- LOW: CSP uses `'unsafe-inline'` for script-src/style-src — required for JSON-LD + small inline scripts under KV caching (nonces would need per-request rendering). Other CSP directives still provide defense in depth.

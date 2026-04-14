@@ -396,6 +396,20 @@ function htmlResponse(body: string, status = 200, analyticsToken?: string, adsen
     'Referrer-Policy': 'strict-origin-when-cross-origin',
     'X-Frame-Options': 'DENY',
     'Permissions-Policy': 'geolocation=(), microphone=(), camera=(), payment=()',
+    'Content-Security-Policy': [
+      "default-src 'self'",
+      "script-src 'self' 'unsafe-inline' https://challenges.cloudflare.com https://static.cloudflareinsights.com https://pagead2.googlesyndication.com",
+      "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+      "font-src 'self' https://fonts.gstatic.com",
+      "img-src 'self' data: https:",
+      "connect-src 'self' https://challenges.cloudflare.com https://cloudflareinsights.com",
+      "frame-src https://challenges.cloudflare.com https://googleads.g.doubleclick.net",
+      "object-src 'none'",
+      "base-uri 'self'",
+      "form-action 'self'",
+      "frame-ancestors 'none'",
+      "upgrade-insecure-requests",
+    ].join('; '),
   };
   if (lastModifiedSec) {
     headers['Last-Modified'] = new Date(lastModifiedSec * 1000).toUTCString();
