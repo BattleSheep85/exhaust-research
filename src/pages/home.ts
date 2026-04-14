@@ -184,16 +184,28 @@ ${searchBar('compact', tsKey)}
     name: 'Chrisputer Labs',
     url: 'https://chrisputer.tech',
     description: 'AI-powered product research backed by 20 years of IT expertise.',
+    publisher: { '@id': 'https://chrisputer.tech/#organization' },
     potentialAction: {
       '@type': 'SearchAction',
       target: 'https://chrisputer.tech/research/new?q={search_term_string}',
       'query-input': 'required name=search_term_string',
     },
   })}</script>`;
+  const organizationJsonLd = `<script type="application/ld+json">${JSON.stringify({
+    '@context': 'https://schema.org',
+    '@type': 'Organization',
+    '@id': 'https://chrisputer.tech/#organization',
+    name: 'Chrisputer Labs',
+    url: 'https://chrisputer.tech',
+    logo: 'https://chrisputer.tech/favicon.svg',
+    description: 'Zero-dependency AI-powered product research platform.',
+    foundingDate: '2025',
+    founder: { '@type': 'Person', name: 'Chris' },
+  })}</script>`;
 
   const canonical = '<link rel="canonical" href="https://chrisputer.tech/">';
   const turnstileScript = tsKey
     ? '<script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>'
     : '';
-  return layout('AI-Powered Product Research', 'AI-powered product research backed by 20 years of IT expertise.', body, canonical + websiteJsonLd + turnstileScript);
+  return layout('AI-Powered Product Research', 'AI-powered product research backed by 20 years of IT expertise.', body, canonical + websiteJsonLd + organizationJsonLd + turnstileScript);
 }
