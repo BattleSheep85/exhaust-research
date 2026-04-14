@@ -443,7 +443,8 @@ ${searchBar('compact', env.TURNSTILE_SITE_KEY)}
       const review: Record<string, unknown> = {
         '@type': 'Review',
         reviewBody: p.verdict,
-        author: { '@type': 'Organization', name: 'Chrisputer Labs' },
+        datePublished: isoDate,
+        author: { '@type': 'Organization', name: 'Chrisputer Labs', url: 'https://chrisputer.tech' },
       };
       if (p.rating != null) review.reviewRating = { '@type': 'Rating', ratingValue: p.rating, bestRating: 5, worstRating: 0 };
       item.review = review;

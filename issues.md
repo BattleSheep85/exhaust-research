@@ -1,6 +1,8 @@
 # Issues
 
-Last updated: 2026-04-14 (keep-improving R72)
+Last updated: 2026-04-14 (keep-improving R73)
+
+- [x] LOW: Product Review JSON-LD missing `datePublished` (`src/pages/research-result.ts`). Google's Review/CriticReview rich-result docs list `datePublished` as recommended; without it Search Console flags reviews as incomplete and they're less likely to be eligible for review snippets. Now emits `datePublished: isoDate` (the research run timestamp) and adds `author.url` to fully qualify the org. Resolved R73.
 
 - [x] HIGH: Product Offer schema violated Google policy on multiple fronts (`src/pages/research-result.ts`): claimed `availability: InStock` without real stock data, named Chrisputer Labs as `seller` when we're not the merchant, and set `url` to the research page instead of the fulfilment URL. Now omits availability (we don't know), sets seller to Amazon.com (actual merchant for affiliate flow), and uses the affiliate search URL as `url`. Resolved R72.
 
