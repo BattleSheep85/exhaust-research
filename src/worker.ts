@@ -279,6 +279,22 @@ async function handleNewResearch(request: Request, url: URL, env: Env, ctx: Exec
     if (data.error && data.error.length < 200) errorMsg = data.error;
   } catch { /* use default */ }
 
+  if (result.status === 429) {
+    return htmlResponse(
+      layout('Please slow down', errorMsg, `<div class="container empty">
+<div class="empty-icon"><svg width="32" height="32" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg></div>
+<h2>You&rsquo;ve hit the rate limit</h2>
+<p>${escapeHtml(errorMsg)}</p>
+<p style="color:var(--text2);margin-top:.5rem">While you wait, browse existing research — chances are someone else already asked something similar.</p>
+<div style="display:flex;gap:.75rem;justify-content:center;margin-top:1.5rem;flex-wrap:wrap">
+<a href="/research" class="btn">Browse research</a>
+<a href="/" class="btn btn-ghost">Home</a>
+</div>
+</div>`, '<meta name="robots" content="noindex, nofollow">'),
+      429, analyticsToken, adsensePub,
+    );
+  }
+
   return htmlResponse(
     layout('Research Error', errorMsg, `<div class="container empty">
 <h2>Something went wrong</h2>
