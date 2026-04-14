@@ -90,6 +90,8 @@ ${hasMore ? `<a href="/research?page=${page + 1}${qs}" class="btn btn-ghost">Nex
 </div>`;
 
   const canonical = '<link rel="canonical" href="https://chrisputer.tech/research">';
+  const prevLink = page > 1 ? `<link rel="prev" href="https://chrisputer.tech/research?page=${page - 1}${qs}">` : '';
+  const nextLink = hasMore ? `<link rel="next" href="https://chrisputer.tech/research?page=${page + 1}${qs}">` : '';
   const noindex = (page > 1 || searchQuery) ? '<meta name="robots" content="noindex, follow">' : '';
   const turnstileScript = env.TURNSTILE_SITE_KEY
     ? '<script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>'
@@ -121,5 +123,5 @@ ${hasMore ? `<a href="/research?page=${page + 1}${qs}" class="btn btn-ghost">Nex
   const structuredData = `<script type="application/ld+json">${breadcrumbLd}</script>` +
     (itemListLd ? `<script type="application/ld+json">${itemListLd}</script>` : '');
 
-  return layout('Browse Research', 'Explore past AI-powered product research.', body, canonical + noindex + turnstileScript + structuredData, { ogUrl: 'https://chrisputer.tech/research' });
+  return layout('Browse Research', 'Explore past AI-powered product research.', body, canonical + prevLink + nextLink + noindex + turnstileScript + structuredData, { ogUrl: 'https://chrisputer.tech/research' });
 }
