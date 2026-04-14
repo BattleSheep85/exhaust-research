@@ -529,6 +529,9 @@ document.addEventListener('DOMContentLoaded',function(){
 </script>`;
   const extra = isProcessing ? activityFeedScript : '';
   const canonical = `<link rel="canonical" href="https://chrisputer.tech/research/${escapeHtml(slug)}">`;
-  const htmlOut = layout(entry.query, entry.summary ?? 'AI-powered product research', body, canonical + structuredData + turnstileScript + extra, layoutMeta);
+  // Keep thin (zero-product) and failed pages out of the index. Direct links still work.
+  const isThin = entry.status === 'complete' && products.length === 0;
+  const noindex = (isThin || isFailed || isProcessing) ? '<meta name="robots" content="noindex, follow">' : '';
+  const htmlOut = layout(entry.query, entry.summary ?? 'AI-powered product research', body, canonical + noindex + structuredData + turnstileScript + extra, layoutMeta);
   return { html: htmlOut, lastModified: lastModifiedTs };
 }
