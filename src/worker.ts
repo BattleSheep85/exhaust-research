@@ -43,6 +43,12 @@ async function handleRequest(request: Request, env: Env, ctx: ExecutionContext):
       return Response.redirect(dest.toString(), 301);
     }
 
+    // Strip trailing slash (except root) to avoid duplicate-content URLs
+    if (path.length > 1 && path.endsWith('/')) {
+      const dest = new URL(path.replace(/\/+$/, '') + url.search, url.origin);
+      return Response.redirect(dest.toString(), 301);
+    }
+
     try {
       // Static files
       if (path === '/favicon.svg') {

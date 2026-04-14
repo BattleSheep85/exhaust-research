@@ -1,6 +1,8 @@
 # Issues
 
-Last updated: 2026-04-14 (keep-improving R69)
+Last updated: 2026-04-14 (keep-improving R70)
+
+- [x] MED: Trailing-slash URLs served duplicate content — `/research/` returned 200 with identical body as `/research`, and `/research/slug/` returned 404 (`src/worker.ts`). Now 301-redirects all non-root trailing-slash paths to the canonical no-slash variant, preserving query string. Fixes crawl budget waste and broken shared links. Resolved R70.
 
 - [x] MED: Generic research error page was a dead end — one "Try again" button back to home (`src/worker.ts`). Now includes an icon, inline compact search form, and Browse/Home ghost buttons, and emits `noindex`. Matches the recovery flow added to the 404 page in R68. Resolved R69.
 
