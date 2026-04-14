@@ -68,10 +68,37 @@ ${hasMore ? `<a href="/research?page=${page + 1}${qs}" class="btn btn-ghost">Nex
 </div>` : ''}
 </div>`;
 
-  const canonical = '<link rel="canonical" href="https://research.chrisputer.tech/research">';
+  const canonical = '<link rel="canonical" href="https://chrisputer.tech/research">';
   const noindex = page > 1 ? '<meta name="robots" content="noindex, follow">' : '';
   const turnstileScript = env.TURNSTILE_SITE_KEY
     ? '<script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>'
     : '';
-  return layout('Browse Research', 'Explore past AI-powered product research.', body, canonical + noindex + turnstileScript);
+
+  const breadcrumbLd = JSON.stringify({
+    '@context': 'https://schema.org',
+    '@type': 'BreadcrumbList',
+    itemListElement: [
+      { '@type': 'ListItem', position: 1, name: 'Home', item: 'https://chrisputer.tech/' },
+      { '@type': 'ListItem', position: 2, name: 'Research', item: 'https://chrisputer.tech/research' },
+    ],
+  });
+  const itemListLd = results.length > 0 ? JSON.stringify({
+    '@context': 'https://schema.org',
+    '@type': 'CollectionPage',
+    name: 'Browse Research',
+    description: 'AI-powered product research archive.',
+    mainEntity: {
+      '@type': 'ItemList',
+      itemListElement: results.map((r, i) => ({
+        '@type': 'ListItem',
+        position: offset + i + 1,
+        url: `https://chrisputer.tech/research/${r.slug}`,
+        name: r.query,
+      })),
+    },
+  }) : '';
+  const structuredData = `<script type="application/ld+json">${breadcrumbLd}</script>` +
+    (itemListLd ? `<script type="application/ld+json">${itemListLd}</script>` : '');
+
+  return layout('Browse Research', 'Explore past AI-powered product research.', body, canonical + noindex + turnstileScript + structuredData);
 }
