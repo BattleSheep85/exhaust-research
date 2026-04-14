@@ -1,6 +1,6 @@
 # Issues
 
-Last updated: 2026-04-14 (keep-improving R22)
+Last updated: 2026-04-14 (keep-improving R33)
 
 ## SEO / Affiliate Surface (from discovery loop #2, 2026-04-14)
 
@@ -103,6 +103,7 @@ Plus 1500ms post-complete delay + full page reload at the end.
 - [x] MEDIUM: Related research block showed 5 copies of the same canonical query — live NAS page linked 5 rows all with `canonical_query = "best home nas 2026"`. Added SQL filter `canonical_query != current` so same-topic siblings are excluded entirely, added `EXISTS (products)` so thin pages can't appear in related, and added client-side dedup-by-canonical before the top-5 slice. Verified: now shows 3 distinct topics (Plex-focused NAS, light bulbs, smart home), no repeats.
 - [x] MEDIUM: Duplicate research rows (same canonical_query, different slugs) surfacing on listings — live browse showed "best home NAS for 2026" 4 times and "best budget mechanical keyboard under $100" 4 times. R39 query-clustering prevents new duplicates but pre-backfill rows still exist. Rewrote the 6 listing queries (home recent/popular, browse default/search, sitemap, Atom feed) to `ROW_NUMBER() OVER (PARTITION BY COALESCE(canonical_query, slug) ORDER BY created_at DESC)` + filter `rn = 1`. Verified: all 10 browse entries now distinct. Individual slugs still resolve directly.
 - [x] MEDIUM: Garbage queries surfacing on public listings — live browse page showed a `<h1>test</h1>` result card. Sitemap filter only covered one surface. Added `LENGTH(r.query) >= 10 AND r.query LIKE '% %'` (at least two tokens, 10+ chars) to every public listing query: sitemap, Atom feed, home recent/popular, browse default + search. Direct `/research/<slug>` URLs remain accessible (preserves shared links) but garbage queries no longer pollute discovery surfaces.
+- [x] MEDIUM: Article JSON-LD missing Google-required fields — `dateModified`, `publisher` (Organization with logo), and `mainEntityOfPage` were absent from the Article schema. Google's Article rich-snippet docs require publisher + dateModified; mainEntityOfPage is recommended. Added all three to `research-result.ts:406-423` using `lastModifiedTs` already in scope. Bumped `CACHE_VERSION` to `v3` to cut over cached pages without manual purge. Verified live on NAS page — all three fields present in JSON-LD.
 - [x] MEDIUM: No Content-Security-Policy header — the two XSS bugs above would have been defense-in-depth blocked by a CSP. Added CSP from `htmlResponse()` covering script-src/style-src/font-src/img-src/connect-src/frame-src plus lockdowns (`object-src 'none'`, `base-uri 'self'`, `form-action 'self'`, `frame-ancestors 'none'`, `upgrade-insecure-requests`). Allowlist covers Turnstile, CF analytics beacon, AdSense, Google Fonts. `'unsafe-inline'` kept for scripts/styles since the app embeds JSON-LD and small inline scripts and KV caching rules out per-request nonces — tracked as known limitation.
 
 ## Known Limitations (accepted)

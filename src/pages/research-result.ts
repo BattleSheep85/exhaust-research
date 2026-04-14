@@ -403,13 +403,22 @@ ${searchBar('compact', env.TURNSTILE_SITE_KEY)}
     return item;
   });
 
+  const isoModified = new Date(lastModifiedTs * 1000).toISOString();
   const jsonLd = JSON.stringify({
     '@context': 'https://schema.org',
     '@type': 'Article',
     headline: entry.query,
     description: entry.summary ?? '',
     datePublished: isoDate,
+    dateModified: isoModified,
     author: { '@type': 'Organization', name: 'Chrisputer Labs', url: 'https://chrisputer.tech' },
+    publisher: {
+      '@type': 'Organization',
+      name: 'Chrisputer Labs',
+      url: 'https://chrisputer.tech',
+      logo: { '@type': 'ImageObject', url: 'https://chrisputer.tech/og-image.svg' },
+    },
+    mainEntityOfPage: { '@type': 'WebPage', '@id': pageUrl },
     ...(jsonLdProducts.length > 0 ? { about: jsonLdProducts } : {}),
   });
 
