@@ -8,6 +8,11 @@ import { escapeHtml } from './lib/utils';
 import { layout } from './lib/html';
 import { getTierConfig, isValidTier } from './lib/research-config';
 
+// Bump when the page template/schema shape changes in a way that should
+// invalidate every cached HTML blob. Old keys age out on their own TTL
+// (home: 5m, research result: 1h) so bumping is a soft cutover, not a purge.
+const CACHE_VERSION = 'v2';
+
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const response = await handleRequest(request, env, ctx);
@@ -102,10 +107,11 @@ async function handleRequest(request: Request, env: Env, ctx: ExecutionContext):
 
       // Home (cached 5 min)
       if (path === '/' || path === '') {
-        const cached = await env.CACHE.get('page:home');
+        const homeKey = `page:${CACHE_VERSION}:home`;
+        const cached = await env.CACHE.get(homeKey);
         if (cached) return htmlResponse(cached, 200, at, adPub);
         const html = await renderHome(env);
-        ctx.waitUntil(env.CACHE.put('page:home', html, { expirationTtl: 300 }));
+        ctx.waitUntil(env.CACHE.put(homeKey, html, { expirationTtl: 300 }));
         return htmlResponse(html, 200, at, adPub);
       }
 
@@ -132,8 +138,8 @@ async function handleRequest(request: Request, env: Env, ctx: ExecutionContext):
         // ?from=<original query> marks a clustered hit — skip the KV cache so
         // the banner reflects the user's phrasing, not a prior visitor's.
         const fromQuery = url.searchParams.get('from');
-        const cacheKey = `page:${slug}`;
-        const cacheMetaKey = `page:${slug}:lm`;
+        const cacheKey = `page:${CACHE_VERSION}:${slug}`;
+        const cacheMetaKey = `page:${CACHE_VERSION}:${slug}:lm`;
         if (!fromQuery) {
           const [cached, cachedLm] = await Promise.all([
             env.CACHE.get(cacheKey),
