@@ -1,5 +1,5 @@
 import { type Env, type Tier, DEFAULT_AFFILIATE_TAG } from '../types';
-import { generateId, generateSlug, sanitizeUrl, generateAffiliateUrl, canonicalizeQuery } from '../lib/utils';
+import { generateId, generateSlug, sanitizeUrl, generateAffiliateUrl, canonicalizeQuery, displayQuery } from '../lib/utils';
 import { runEngine } from '../lib/engine';
 import { getTierConfig, isValidTier } from '../lib/research-config';
 
@@ -300,7 +300,8 @@ export async function handleSearchSuggest(url: URL, env: Env): Promise<Response>
        ORDER BY view_count DESC LIMIT 6`
     ).bind(ftsQuery).all<{ slug: string; query: string; category: string | null; view_count: number }>();
 
-    return json(rows.results ?? []);
+    const pretty = (rows.results ?? []).map((r) => ({ ...r, query: displayQuery(r.query) }));
+    return json(pretty);
   } catch {
     // FTS query syntax error — fall back to LIKE
     const rows = await env.DB.prepare(
@@ -313,7 +314,8 @@ export async function handleSearchSuggest(url: URL, env: Env): Promise<Response>
        ORDER BY view_count DESC LIMIT 6`
     ).bind(`%${sanitized}%`).all<{ slug: string; query: string; category: string | null; view_count: number }>();
 
-    return json(rows.results ?? []);
+    const pretty = (rows.results ?? []).map((r) => ({ ...r, query: displayQuery(r.query) }));
+    return json(pretty);
   }
 }
 
