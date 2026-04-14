@@ -119,11 +119,13 @@ async function getRelatedResearch(
                WHERE status = 'complete'
                  AND slug != ?1
                  AND canonical_query IS NOT NULL
+                 AND canonical_query != ?${tokens.length + 2}
+                 AND EXISTS (SELECT 1 FROM products p WHERE p.research_id = research.id)
                  AND (${likeClauses})
                ORDER BY view_count DESC
                LIMIT 50`;
 
-  const binds: unknown[] = [currentSlug, ...tokens.map((t) => `%${t}%`)];
+  const binds: unknown[] = [currentSlug, ...tokens.map((t) => `%${t}%`), canonical ?? ''];
   const rows = await db.prepare(sql).bind(...binds).all<RelatedResearchRow>();
   const tokenSet = new Set(tokens);
 
@@ -136,7 +138,17 @@ async function getRelatedResearch(
   });
 
   scored.sort((a, b) => (b.score - a.score) || (b.view_count - a.view_count));
-  return scored.filter((s) => s.score >= 2).slice(0, 5);
+
+  const seen = new Set<string>();
+  const deduped: typeof scored = [];
+  for (const s of scored) {
+    const key = s.canonical_query ?? s.slug;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    if (s.score >= 2) deduped.push(s);
+    if (deduped.length >= 5) break;
+  }
+  return deduped;
 }
 
 function retailerLabel(url: string): string {
