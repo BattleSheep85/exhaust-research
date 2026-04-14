@@ -513,6 +513,13 @@ ${searchBar('compact', env.TURNSTILE_SITE_KEY)}
     ogType: 'article',
     ogImage: `https://chrisputer.tech/research/${escapeHtml(slug)}/og.svg`,
     twitterCard: 'summary_large_image',
+    article: {
+      publishedTime: isoDate,
+      modifiedTime: isoModified,
+      author: 'Chrisputer Labs',
+      ...(entry.category ? { section: entry.category } : {}),
+      ...(keywordTerms.length > 0 ? { tags: keywordTerms } : {}),
+    },
   };
 
   const turnstileScript = env.TURNSTILE_SITE_KEY

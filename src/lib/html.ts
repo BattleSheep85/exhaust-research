@@ -5,6 +5,13 @@ export interface LayoutMeta {
   ogType?: string;
   ogImage?: string;
   twitterCard?: string;
+  article?: {
+    publishedTime?: string; // ISO 8601
+    modifiedTime?: string;  // ISO 8601
+    section?: string;
+    tags?: string[];
+    author?: string;
+  };
 }
 
 // Tagged template literal for safe HTML — auto-escapes interpolated values
@@ -72,6 +79,17 @@ export function layout(title: string, description: string, body: string, extra_h
 <meta name="twitter:title" content="${escapedTitle} | Chrisputer Labs">
 <meta name="twitter:description" content="${escapedDesc}">
 <meta name="twitter:image" content="${escapeHtml(ogImage)}">
+<meta name="twitter:image:alt" content="${escapedTitle} — Chrisputer Labs">${
+    meta?.article && ogType === 'article'
+      ? (
+          (meta.article.publishedTime ? `\n<meta property="article:published_time" content="${escapeHtml(meta.article.publishedTime)}">` : '') +
+          (meta.article.modifiedTime ? `\n<meta property="article:modified_time" content="${escapeHtml(meta.article.modifiedTime)}">` : '') +
+          (meta.article.author ? `\n<meta property="article:author" content="${escapeHtml(meta.article.author)}">` : '') +
+          (meta.article.section ? `\n<meta property="article:section" content="${escapeHtml(meta.article.section)}">` : '') +
+          (meta.article.tags ? meta.article.tags.map((t) => `\n<meta property="article:tag" content="${escapeHtml(t)}">`).join('') : '')
+        )
+      : ''
+  }
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <link rel="apple-touch-icon" href="/favicon.svg">
 <link rel="manifest" href="/manifest.webmanifest">

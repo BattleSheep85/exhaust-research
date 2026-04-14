@@ -1,6 +1,8 @@
 # Issues
 
-Last updated: 2026-04-14 (keep-improving R73)
+Last updated: 2026-04-14 (keep-improving R74)
+
+- [x] LOW: Research pages set `og:type=article` but emitted no `article:*` Open Graph properties (`src/lib/html.ts`, `src/pages/research-result.ts`). The article OG namespace defines `published_time`, `modified_time`, `author`, `section`, and `tag` — recommended for any article-typed share. Also added `twitter:image:alt` for screen readers on Twitter card previews. Now wired through `LayoutMeta.article` and verified live. Resolved R74.
 
 - [x] LOW: Product Review JSON-LD missing `datePublished` (`src/pages/research-result.ts`). Google's Review/CriticReview rich-result docs list `datePublished` as recommended; without it Search Console flags reviews as incomplete and they're less likely to be eligible for review snippets. Now emits `datePublished: isoDate` (the research run timestamp) and adds `author.url` to fully qualify the org. Resolved R73.
 
