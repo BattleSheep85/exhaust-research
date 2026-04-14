@@ -16,8 +16,21 @@ export function renderAbout(): string {
       worksFor: { '@id': 'https://chrisputer.tech/#organization' },
     },
   })}</script>`;
+  const breadcrumbLd = `<script type="application/ld+json">${JSON.stringify({
+    '@context': 'https://schema.org',
+    '@type': 'BreadcrumbList',
+    itemListElement: [
+      { '@type': 'ListItem', position: 1, name: 'Home', item: 'https://chrisputer.tech/' },
+      { '@type': 'ListItem', position: 2, name: 'About', item: 'https://chrisputer.tech/about' },
+    ],
+  })}</script>`;
   return layout('About', 'About Chrisputer Labs — AI-powered product research backed by 20 years of IT expertise.', `
 <div class="container prose" style="padding:4rem 1.5rem;max-width:48rem;margin:0 auto">
+<nav aria-label="Breadcrumb" class="breadcrumb" style="font-size:.85rem;color:var(--text2);margin-bottom:1rem">
+<a href="/" style="color:var(--text2)">Home</a>
+<span aria-hidden="true" style="margin:0 .4rem;color:var(--text3)">/</span>
+<span style="color:var(--text)">About</span>
+</nav>
 <h1 style="font-size:2rem;font-weight:800;color:var(--text);margin-bottom:2rem">About Chrisputer Labs</h1>
 
 <p style="font-size:1.1rem">Product research sucks. You Google something, get 10 SEO-optimized listicles that all recommend the same Amazon bestsellers, and walk away knowing less than when you started.</p>
@@ -55,5 +68,5 @@ export function renderAbout(): string {
 <p>This site uses Amazon Associates affiliate links. When you buy a product through one of our links, we earn a small commission at no extra cost to you. This helps keep the site running. Affiliate relationships never influence our product rankings or recommendations.</p>
 
 <p>Source code is intentionally zero-dependency — no npm, no package-lock, no node_modules. Every line is hand-written and auditable. That's a deliberate stance against supply-chain risk: you're reading a site where nothing was pulled from a registry that could be compromised.</p>
-</div>`, canonical + authorJsonLd, { ogUrl: 'https://chrisputer.tech/about' });
+</div>`, canonical + authorJsonLd + breadcrumbLd, { ogUrl: 'https://chrisputer.tech/about' });
 }

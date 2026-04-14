@@ -1,6 +1,8 @@
 # Issues
 
-Last updated: 2026-04-14 (keep-improving R79)
+Last updated: 2026-04-14 (keep-improving R80)
+
+- [x] MED: `/about` page lacked both an HTML breadcrumb nav and BreadcrumbList JSON-LD (`src/pages/about.ts`) — `/research` and `/research/<slug>` both have them. UX inconsistency (no Home → About trail) and missing schema (Google uses BreadcrumbList for SERP breadcrumb display). Added both. Resolved R80.
 
 - [ ] LOW: A test research entry (`test-gizmo-xyzqq-07a60134`) was inadvertently created during R76 probing of `/research/new`. It passes the LENGTH/space/has-products quality filter so it's leaking into the sitemap, Atom feed, and home page. Single-row data cleanup task — not appropriate to do via autonomous loop without explicit approval (Scope Guards: DB schema/data changes). Leaving for Chris to delete via `wrangler d1 execute exhaust-research-db --remote --command "DELETE FROM research WHERE slug='test-gizmo-xyzqq-07a60134'"`.
 
