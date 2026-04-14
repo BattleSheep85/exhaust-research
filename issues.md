@@ -1,6 +1,36 @@
 # Issues
 
-Last updated: 2026-04-06
+Last updated: 2026-04-14 (keep-improving R1)
+
+## SEO / Affiliate Surface (from discovery loop #2, 2026-04-14)
+
+Audited 4 live research pages (keyboard, NAS, realtor, candy). Every single page
+has zero internal links to other research pages. All 30+ "Sources" are followed
+(no `nofollow`) and many point to direct SERP competitors (PCMag, Wirecutter,
+RTINGS, fastexpert, remax). Realtor/candy pages prove the system handles local
+service queries — but with nonsensical "Buy on Amazon" CTAs.
+
+- [x] HIGH: Zero internal research→research links on result pages — added "Related research" block computed from `canonical_query` token overlap (top 5 sibling pages, scored by shared tokens + category match). `getRelatedResearch` in research-result.ts
+- [x] HIGH: `<a>` tags in Sources list missing `rel="nofollow"` — added `sourceRel(url)` helper that emits `nofollow ugc` for Reddit/StackExchange/Quora/HN/Medium/Substack and plain `nofollow` elsewhere
+- [x] MEDIUM: Non-product queries triggered Amazon search fallback — added `isNonProductCategory` heuristic (realtor/service/professional/local keyword match); service pages now show "Visit site" (mfr URL) or "Search online" (Google) instead of affiliate CTA
+- [x] MEDIUM: Meta descriptions up to 464 chars — added `capDescription` in html.ts that trims at last word boundary under 155 chars and appends ellipsis
+- [x] MEDIUM: ~900-word pages vs 2000-3500 competitor reviews — synthesis prompt now requires a `buyersGuide` object (howToChoose + pitfalls + marketingToIgnore); rendered between summary and products
+- [x] LOW: No "Last refreshed" signal — added visible "Last updated" line in page meta (when different from created_at) and `Last-Modified` HTTP header derived from `completed_at`
+- [x] LOW: Local-service queries — **decision: lean in.** Service categories (realtor/contractor/professional/local) now render a dedicated CTA via `isNonProductCategory` + "Visit site"/"Search online" fallback in research-result.ts. No input validation added — the surface is a free acquisition channel for long-tail SEO, and adding a category gate would reject queries the pipeline handles well. If service pages start ranking, productize per-category CTAs (quote request, directory links) as a follow-up.
+
+## Perceived Speed (from discovery loop, 2026-04-14)
+
+Observed on the instant-tier run `best-budget-mechanical-keyboard-under-100-2acfbd26`:
+total submit→result = 21s. Scrape phase has healthy ~1s event beats; synthesis phase has
+one unexplained 6s black-box gap ("Writing final report..." → "Report complete").
+Plus 1500ms post-complete delay + full page reload at the end.
+
+- [x] HIGH: Synthesis is a 6s black box — added SSE streaming in `callLLMStreaming` with per-chunk watchdog, emits per-product "Writing section: X" events as JSON arrives; falls back to non-streaming if parse fails
+- [x] HIGH: Post-complete reload is 1500ms + full HTML fetch — replaced with in-place DOM swap via DOMParser in `src/pages/research-result.ts`; reload preserved as error fallback
+- [x] MEDIUM: Agent note-taking is sparse — strengthened prompt to require `note()` per source with "1 note per 3 sources" target; observed run jumped from 3 notes to 5 notes and from 3 products to 5 products
+- [x] MEDIUM: 1s polling interval dominates first-event latency — first 2 polls now 500ms, subsequent 1000ms; first-event observed dropped ~2226ms → ~1168ms
+- [x] LOW: Parallel quick-answer preview — `generatePreview()` fires a 3s LLM call from prior knowledge in parallel with the scrape; shown above activity feed once available
+- [x] LOW: Query-clustering cache — canonical form (stopwords/years/prices stripped, sorted) in new `research.canonical_query` column; matching canonical within 14d serves existing slug with "Re-research with fresh data" CTA
 
 ## Security
 
