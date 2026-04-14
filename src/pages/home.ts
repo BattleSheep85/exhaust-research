@@ -216,11 +216,26 @@ ${searchBar('compact', tsKey)}
     '@type': 'Organization',
     '@id': 'https://chrisputer.tech/#organization',
     name: 'Chrisputer Labs',
+    alternateName: 'Chrisputer',
     url: 'https://chrisputer.tech',
-    logo: 'https://chrisputer.tech/favicon.svg',
+    logo: {
+      '@type': 'ImageObject',
+      url: 'https://chrisputer.tech/favicon.svg',
+      width: 512,
+      height: 512,
+    },
+    image: 'https://chrisputer.tech/og-image.svg',
     description: 'Zero-dependency AI-powered product research platform.',
+    slogan: 'Product research by a human who cares, powered by AI.',
     foundingDate: '2025',
-    founder: { '@type': 'Person', name: 'Chris' },
+    knowsAbout: ['Product Research', 'Consumer Electronics', 'Homelab', 'Networking', 'IT Infrastructure'],
+    founder: {
+      '@type': 'Person',
+      '@id': 'https://chrisputer.tech/about#chris',
+      name: 'Chris',
+      jobTitle: 'IT Professional & Homelab Enthusiast',
+      url: 'https://chrisputer.tech/about',
+    },
   })}</script>`;
 
   const canonical = '<link rel="canonical" href="https://chrisputer.tech/">';

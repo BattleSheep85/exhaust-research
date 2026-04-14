@@ -1,6 +1,8 @@
 # Issues
 
-Last updated: 2026-04-14 (keep-improving R80)
+Last updated: 2026-04-14 (keep-improving R81)
+
+- [x] LOW: Home page Organization JSON-LD was minimal (`src/pages/home.ts`) — bare `logo` URL (no dimensions), no `image` (Google Knowledge Graph distinguishes logo from image), no `slogan`/`knowsAbout`/`alternateName`, and `founder` was a naked `{name: 'Chris'}` with no `@id`/`url`/`jobTitle` to cross-reference the AboutPage Person. Enriched all five — logo is now an ImageObject with 512×512 dimensions, image points to og-image.svg, founder has `@id: https://chrisputer.tech/about#chris` that matches the AboutPage mainEntity, plus topical `knowsAbout` array. Bumped CACHE_VERSION v30 → v31 to flush the KV cache. Resolved R81.
 
 - [x] MED: `/about` page lacked both an HTML breadcrumb nav and BreadcrumbList JSON-LD (`src/pages/about.ts`) — `/research` and `/research/<slug>` both have them. UX inconsistency (no Home → About trail) and missing schema (Google uses BreadcrumbList for SERP breadcrumb display). Added both. Resolved R80.
 
