@@ -306,11 +306,19 @@ async function handleNewResearch(request: Request, url: URL, env: Env, ctx: Exec
   }
 
   return htmlResponse(
-    layout('Research Error', errorMsg, `<div class="container empty">
+    layout('Research Error', errorMsg, `<div class="container empty" style="max-width:40rem;margin:0 auto">
+<div class="empty-icon"><svg width="32" height="32" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg></div>
 <h2>Something went wrong</h2>
 <p>${escapeHtml(errorMsg)}</p>
-<a href="/" class="btn" style="margin-top:1rem">Try again</a>
-</div>`),
+<div style="margin-top:1.5rem;padding-top:1.5rem;border-top:1px solid var(--surface2)">
+<p style="color:var(--text3);font-size:.85rem;margin-bottom:.75rem">Try a different query:</p>
+${searchBar('compact')}
+</div>
+<div style="display:flex;gap:.5rem;flex-wrap:wrap;justify-content:center;margin-top:1.5rem">
+<a href="/research" class="btn btn-ghost">Browse all research</a>
+<a href="/" class="btn btn-ghost">Home</a>
+</div>
+</div>`, '<meta name="robots" content="noindex, nofollow">'),
     result.status, analyticsToken, adsensePub,
   );
 }

@@ -1,6 +1,8 @@
 # Issues
 
-Last updated: 2026-04-14 (keep-improving R68)
+Last updated: 2026-04-14 (keep-improving R69)
+
+- [x] MED: Generic research error page was a dead end — one "Try again" button back to home (`src/worker.ts`). Now includes an icon, inline compact search form, and Browse/Home ghost buttons, and emits `noindex`. Matches the recovery flow added to the 404 page in R68. Resolved R69.
 
 - [x] MED: 404 "Research not found" page had no search form and no query recovery — users hit a dead end with only Browse/Home buttons (`src/worker.ts`). Now strips the slug hash suffix to infer the likely query, surfaces "Did you mean …?" with one-click Research and Search-existing CTAs, and inlines the compact search bar. Resolved R68.
 
