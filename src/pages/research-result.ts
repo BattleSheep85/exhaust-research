@@ -425,14 +425,17 @@ ${searchBar('compact', env.TURNSTILE_SITE_KEY)}
     const descSource = p.verdict || p.bestFor || (p.pros.length > 0 ? p.pros.slice(0, 3).join('. ') : '');
     if (descSource) item.description = descSource;
     if (p.price != null) {
+      // We don't run transactions or know real-time stock, so we omit
+      // `availability` and set `seller` to the merchant we link out to.
+      // `url` points to the fulfilment link (affiliate search) so the Offer
+      // matches where the user can actually buy.
       const offer: Record<string, unknown> = {
         '@type': 'Offer',
         price: p.price,
         priceCurrency: 'USD',
-        availability: 'https://schema.org/InStock',
         priceValidUntil,
-        url: pageUrl,
-        seller: { '@type': 'Organization', name: 'Chrisputer Labs' },
+        url: amazonSearchUrl(p.name, p.brand, affiliateTag),
+        seller: { '@type': 'Organization', name: 'Amazon.com' },
       };
       item.offers = offer;
     }

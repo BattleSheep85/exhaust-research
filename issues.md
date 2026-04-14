@@ -1,6 +1,8 @@
 # Issues
 
-Last updated: 2026-04-14 (keep-improving R71)
+Last updated: 2026-04-14 (keep-improving R72)
+
+- [x] HIGH: Product Offer schema violated Google policy on multiple fronts (`src/pages/research-result.ts`): claimed `availability: InStock` without real stock data, named Chrisputer Labs as `seller` when we're not the merchant, and set `url` to the research page instead of the fulfilment URL. Now omits availability (we don't know), sets seller to Amazon.com (actual merchant for affiliate flow), and uses the affiliate search URL as `url`. Resolved R72.
 
 - [x] HIGH: Product JSON-LD emitted `aggregateRating` with `reviewCount: 1` from a single self-authored review (`src/pages/research-result.ts`). Google's structured-data guidelines explicitly prohibit aggregate ratings based on a single review or self-reviews, and it can trigger a manual action. Removed aggregateRating entirely; the editorial Review with reviewRating remains (valid first-party review schema). Resolved R71.
 
