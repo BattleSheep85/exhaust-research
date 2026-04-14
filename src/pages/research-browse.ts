@@ -105,13 +105,25 @@ ${hasMore ? `<a href="/research?page=${page + 1}${qs}" class="btn btn-ghost">Nex
       { '@type': 'ListItem', position: 2, name: 'Research', item: 'https://chrisputer.tech/research' },
     ],
   });
+  const collectionUrl = searchQuery
+    ? `https://chrisputer.tech/research?q=${encodeURIComponent(searchQuery)}${page > 1 ? `&page=${page}` : ''}`
+    : `https://chrisputer.tech/research${page > 1 ? `?page=${page}` : ''}`;
   const itemListLd = results.length > 0 ? JSON.stringify({
     '@context': 'https://schema.org',
     '@type': 'CollectionPage',
-    name: 'Browse Research',
-    description: 'AI-powered product research archive.',
+    '@id': collectionUrl,
+    url: collectionUrl,
+    name: searchQuery ? `Search: ${searchQuery} | Chrisputer Labs` : 'Browse Research',
+    description: searchQuery
+      ? `Research results matching "${searchQuery}".`
+      : 'AI-powered product research archive.',
+    inLanguage: 'en-US',
+    isPartOf: { '@id': 'https://chrisputer.tech/#website' },
+    publisher: { '@id': 'https://chrisputer.tech/#organization' },
     mainEntity: {
       '@type': 'ItemList',
+      numberOfItems: results.length,
+      itemListOrder: 'https://schema.org/ItemListOrderDescending',
       itemListElement: results.map((r, i) => ({
         '@type': 'ListItem',
         position: offset + i + 1,

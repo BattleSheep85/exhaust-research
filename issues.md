@@ -1,6 +1,8 @@
 # Issues
 
-Last updated: 2026-04-14 (keep-improving R83)
+Last updated: 2026-04-14 (keep-improving R84)
+
+- [x] LOW: Browse page CollectionPage JSON-LD was disconnected from the graph (`src/pages/research-browse.ts`) — no `@id`, no `url`, no `isPartOf`/`publisher`, no `inLanguage`, ItemList had no `numberOfItems` or `itemListOrder`. Added all of them, wired `isPartOf: #website` / `publisher: #organization` so the browse page closes into R82's site graph, and made name/description query-aware (search result pages now say "Search: X | Chrisputer Labs" instead of generic "Browse Research"). `@id`/`url` reflect actual pagination/query params. Bumped CACHE_VERSION v32 → v33. Resolved R84.
 
 - [x] LOW: Sitemap `/about` entry had no `<lastmod>` (`src/worker.ts`). Crawlers rely on lastmod to schedule recrawls; without it, recent changes to /about (R80 breadcrumb, R82 JSON-LD graph closure) won't get re-indexed promptly. Added `ABOUT_LASTMOD` constant (current date 2026-04-14) with comment noting it should be bumped when /about materially changes. Verified live via cache-busted fetch. Resolved R83.
 
