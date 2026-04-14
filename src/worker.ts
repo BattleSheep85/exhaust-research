@@ -289,12 +289,20 @@ ${summaryText ? `<text x="80" y="${category ? '310' : '270'}" font-family="syste
 }
 
 async function generateSitemap(origin: string, env: Env): Promise<Response> {
+  // Only expose research pages with actual product cards. Honest-no-data results
+  // (garbage queries, insufficient source data) are thin content and will hurt
+  // ranking if Google crawls them.
   const rows = await env.DB.prepare(
-    `SELECT slug, created_at FROM research WHERE status = 'complete' ORDER BY created_at DESC LIMIT 5000`
-  ).all<{ slug: string; created_at: number }>();
+    `SELECT r.slug, r.created_at, COALESCE(r.completed_at, r.created_at) AS lastmod
+     FROM research r
+     WHERE r.status = 'complete'
+       AND EXISTS (SELECT 1 FROM products p WHERE p.research_id = r.id)
+     ORDER BY r.created_at DESC
+     LIMIT 5000`
+  ).all<{ slug: string; created_at: number; lastmod: number }>();
 
   const entries = (rows.results ?? []).map((r) => {
-    const date = new Date(r.created_at * 1000).toISOString().split('T')[0];
+    const date = new Date(r.lastmod * 1000).toISOString().split('T')[0];
     return `<url><loc>${origin}/research/${r.slug}</loc><lastmod>${date}</lastmod><changefreq>monthly</changefreq></url>`;
   }).join('\n');
 

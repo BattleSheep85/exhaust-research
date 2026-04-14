@@ -87,6 +87,7 @@ Plus 1500ms post-complete delay + full page reload at the end.
 ## Generator Findings (2026-04-14)
 
 - [x] MEDIUM: HEAD requests return 405 on every route — wrapped the worker `fetch` so HEAD runs the GET handler and the body is stripped at the outer layer; router accepts both methods. Verified live: HEAD returns 200 with headers + 0 bytes.
+- [x] MEDIUM: Sitemap exposes thin-content slugs (honest-no-data results, garbage queries). Filtered `generateSitemap` to only include research with at least 1 product via `EXISTS` subquery; verified live sitemap no longer contains garbage-query slugs.
 
 ## Known Limitations (accepted)
 
