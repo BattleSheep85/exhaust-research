@@ -1,16 +1,42 @@
-import type { Env } from './types';
+import type { Env, Tier } from './types';
 import { renderHome } from './pages/home';
 import { renderResearchResult } from './pages/research-result';
 import { renderBrowse } from './pages/research-browse';
 import { renderAbout } from './pages/about';
-import { handleResearchPost, verifyTurnstile } from './pages/api';
+import { handleResearchPost, handleResearchEvents, handleSearchSuggest, handleSubscribe, verifyTurnstile } from './pages/api';
 import { escapeHtml } from './lib/utils';
 import { layout } from './lib/html';
+import { getTierConfig, isValidTier } from './lib/research-config';
 
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+    const response = await handleRequest(request, env, ctx);
+    // HEAD: same headers/status as GET, body stripped. Done here (not per-route)
+    // so link checkers, uptime monitors, and Googlebot prefetch all just work.
+    if (request.method === 'HEAD') {
+      return new Response(null, { status: response.status, headers: response.headers });
+    }
+    return response;
+  },
+} satisfies ExportedHandler<Env>;
+
+async function handleRequest(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
     const path = url.pathname;
+    const at = env.CF_ANALYTICS_TOKEN;
+    const adPub = env.ADSENSE_PUBLISHER_ID;
+
+    // 301 redirect old subdomain to apex domain
+    if (url.hostname === 'research.chrisputer.tech') {
+      const dest = new URL(url.pathname + url.search, 'https://chrisputer.tech');
+      return Response.redirect(dest.toString(), 301);
+    }
+
+    // www → apex redirect
+    if (url.hostname === 'www.chrisputer.tech') {
+      const dest = new URL(url.pathname + url.search, 'https://chrisputer.tech');
+      return Response.redirect(dest.toString(), 301);
+    }
 
     try {
       // Static files
@@ -28,6 +54,16 @@ export default {
         });
       }
 
+      if (path === '/ads.txt') {
+        const pubId = env.ADSENSE_PUBLISHER_ID;
+        const body = pubId
+          ? `google.com, ${pubId}, DIRECT, f08c47fec0942fa0`
+          : '';
+        return new Response(body, {
+          headers: { 'Content-Type': 'text/plain', 'Cache-Control': 'public, max-age=86400' },
+        });
+      }
+
       if (path === '/sitemap.xml') {
         return generateSitemap(url.origin, env);
       }
@@ -37,37 +73,88 @@ export default {
         return handleResearchPost(request, env, ctx);
       }
 
-      // Page routes (GET only)
-      if (request.method !== 'GET') {
+      // Events endpoint for activity feed polling
+      const eventsMatch = path.match(/^\/api\/research\/([a-z0-9-]+)\/events$/);
+      if (eventsMatch && request.method === 'GET') {
+        return handleResearchEvents(eventsMatch[1], url, env);
+      }
+
+      // FTS5 autocomplete suggestions
+      if (path === '/api/search/suggest' && request.method === 'GET') {
+        return handleSearchSuggest(url, env);
+      }
+
+      // Email subscription for research notifications
+      if (path === '/api/subscribe' && request.method === 'POST') {
+        return handleSubscribe(request, env);
+      }
+
+      // Page routes: accept GET and HEAD. HEAD is transformed to a bodyless
+      // response by the outer wrapper in `fetch`, so the handler can treat it
+      // identically to GET.
+      if (request.method !== 'GET' && request.method !== 'HEAD') {
         return new Response('Method not allowed', { status: 405 });
       }
 
-      // Home
+      // Home (cached 5 min)
       if (path === '/' || path === '') {
-        return htmlResponse(await renderHome(env));
+        const cached = await env.CACHE.get('page:home');
+        if (cached) return htmlResponse(cached, 200, at, adPub);
+        const html = await renderHome(env);
+        ctx.waitUntil(env.CACHE.put('page:home', html, { expirationTtl: 300 }));
+        return htmlResponse(html, 200, at, adPub);
       }
 
       // Research new (triggers API then redirects)
       if (path === '/research/new') {
-        return handleNewResearch(url, env, ctx);
+        return handleNewResearch(request, url, env, ctx, at, adPub);
       }
 
       // Research browse
       if (path === '/research' || path === '/research/') {
-        return htmlResponse(await renderBrowse(url, env));
+        return htmlResponse(await renderBrowse(url, env), 200, at, adPub);
       }
 
-      // Research result
+      // Dynamic OG image for research results
+      const ogMatch = path.match(/^\/research\/([a-z0-9-]+)\/og\.svg$/);
+      if (ogMatch) {
+        return generateOgImage(ogMatch[1], env);
+      }
+
+      // Research result (cached 1h for completed research)
       const slugMatch = path.match(/^\/research\/([a-z0-9-]+)$/);
       if (slugMatch) {
-        const result = await renderResearchResult(slugMatch[1], env);
+        const slug = slugMatch[1];
+        // ?from=<original query> marks a clustered hit — skip the KV cache so
+        // the banner reflects the user's phrasing, not a prior visitor's.
+        const fromQuery = url.searchParams.get('from');
+        const cacheKey = `page:${slug}`;
+        const cacheMetaKey = `page:${slug}:lm`;
+        if (!fromQuery) {
+          const [cached, cachedLm] = await Promise.all([
+            env.CACHE.get(cacheKey),
+            env.CACHE.get(cacheMetaKey),
+          ]);
+          if (cached) {
+            const lm = cachedLm ? parseInt(cachedLm, 10) || undefined : undefined;
+            return htmlResponse(cached, 200, at, adPub, lm);
+          }
+        }
+
+        const result = await renderResearchResult(slug, env, fromQuery);
         if (result instanceof Response) return result;
-        return htmlResponse(result);
+
+        // Cache completed/failed pages (not actively processing, not banner variant)
+        if (!fromQuery && !result.html.includes('id="processing"')) {
+          ctx.waitUntil(env.CACHE.put(cacheKey, result.html, { expirationTtl: 3600 }));
+          ctx.waitUntil(env.CACHE.put(cacheMetaKey, String(result.lastModified), { expirationTtl: 3600 }));
+        }
+        return htmlResponse(result.html, 200, at, adPub, result.lastModified);
       }
 
       // About
       if (path === '/about') {
-        return htmlResponse(renderAbout());
+        return htmlResponse(renderAbout(), 200, at, adPub);
       }
 
       // 404
@@ -77,7 +164,7 @@ export default {
 <p>The page you're looking for doesn't exist.</p>
 <a href="/" class="btn" style="margin-top:1rem">Go home</a>
 </div>`),
-        404,
+        404, at, adPub,
       );
     } catch (error) {
       console.error('Unhandled error:', error);
@@ -87,32 +174,33 @@ export default {
 <p>Please try again.</p>
 <a href="/" class="btn" style="margin-top:1rem">Go home</a>
 </div>`),
-        500,
+        500, at, adPub,
       );
     }
-  },
-} satisfies ExportedHandler<Env>;
+}
 
-async function handleNewResearch(url: URL, env: Env, ctx: ExecutionContext): Promise<Response> {
+async function handleNewResearch(request: Request, url: URL, env: Env, ctx: ExecutionContext, analyticsToken?: string, adsensePub?: string): Promise<Response> {
   const query = url.searchParams.get('q')?.trim();
   if (!query) return Response.redirect(new URL('/', url.origin).toString(), 302);
 
-  // Verify Turnstile if configured
-  if (env.TURNSTILE_SECRET_KEY) {
+  const tier = url.searchParams.get('tier') ?? 'instant';
+  const validTier: Tier = isValidTier(tier) ? tier : 'instant';
+  const tierConfig = getTierConfig(validTier);
+
+  // Verify Turnstile — required for exhaustive tier, optional bot-check for others
+  if (env.TURNSTILE_SECRET_KEY && tierConfig.requireTurnstile) {
     const token = url.searchParams.get('cf-turnstile-response') ?? '';
-    const ip = '127.0.0.1'; // Internal, Turnstile uses its own IP detection
-    if (!token || !(await verifyTurnstile(token, env.TURNSTILE_SECRET_KEY, ip))) {
+    if (!token || !(await verifyTurnstile(token, env.TURNSTILE_SECRET_KEY, '127.0.0.1'))) {
       return htmlResponse(
-        layout('Verification Failed', 'CAPTCHA verification failed.', `<div class="container empty">
+        layout('Verification Failed', 'CAPTCHA verification required for Deep Dive tier.', `<div class="container empty">
 <h2>Verification failed</h2>
-<p>Please go back and try again.</p>
+<p>Deep Dive research requires CAPTCHA verification. Please go back and try again.</p>
 <a href="/" class="btn" style="margin-top:1rem">Go home</a>
 </div>`),
-        403,
+        403, analyticsToken, adsensePub,
       );
     }
   }
-
   const apiUrl = new URL('/api/research', url.origin);
 
   // Build a real request to our own handler (avoids internal fetch bypass)
@@ -121,17 +209,23 @@ async function handleNewResearch(url: URL, env: Env, ctx: ExecutionContext): Pro
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'CF-Connecting-IP': '127.0.0.1', // Internal request
+        'CF-Connecting-IP': request.headers.get('CF-Connecting-IP') ?? '127.0.0.1',
       },
-      body: JSON.stringify({ query }),
+      body: JSON.stringify({ query, tier, fresh: url.searchParams.get('fresh') === '1' }),
     }),
     env,
     ctx,
   );
 
   if (result.ok) {
-    const data: { slug: string } = await result.json();
-    return Response.redirect(new URL(`/research/${data.slug}`, url.origin).toString(), 302);
+    const data: { slug: string; clustered?: boolean } = await result.json();
+    const dest = new URL(`/research/${data.slug}`, url.origin);
+    if (data.clustered) {
+      // Preserve the user's original phrasing so the result page can show a
+      // "we matched your query to existing research" banner.
+      dest.searchParams.set('from', query);
+    }
+    return Response.redirect(dest.toString(), 302);
   }
 
   // Error page
@@ -147,8 +241,51 @@ async function handleNewResearch(url: URL, env: Env, ctx: ExecutionContext): Pro
 <p>${escapeHtml(errorMsg)}</p>
 <a href="/" class="btn" style="margin-top:1rem">Try again</a>
 </div>`),
-    result.status,
+    result.status, analyticsToken, adsensePub,
   );
+}
+
+async function generateOgImage(slug: string, env: Env): Promise<Response> {
+  const row = await env.DB.prepare(
+    `SELECT r.query, r.category, r.summary,
+       (SELECT COUNT(*) FROM products WHERE products.research_id = r.id) AS product_count
+     FROM research r WHERE r.slug = ?`
+  ).bind(slug).first<{ query: string; category: string | null; summary: string | null; product_count: number }>();
+
+  if (!row) {
+    return new Response(OG_IMAGE_SVG, { headers: { 'Content-Type': 'image/svg+xml', 'Cache-Control': 'public, max-age=86400' } });
+  }
+
+  const title = escapeHtml(row.query.length > 60 ? row.query.slice(0, 57) + '...' : row.query);
+  const category = row.category ? escapeHtml(row.category) : '';
+  const subtitle = row.product_count > 0
+    ? `${row.product_count} products compared`
+    : 'AI-powered analysis';
+  const summaryText = row.summary
+    ? escapeHtml(row.summary.length > 120 ? row.summary.slice(0, 117) + '...' : row.summary)
+    : '';
+
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" width="1200" height="630">
+<rect width="1200" height="630" fill="#020617"/>
+<rect x="40" y="40" width="1120" height="550" rx="24" fill="#0f172a" stroke="#1e293b" stroke-width="2"/>
+<rect x="80" y="80" width="64" height="64" rx="14" fill="#2563eb"/>
+<text x="112" y="124" font-family="system-ui,sans-serif" font-size="28" font-weight="800" fill="#fff" text-anchor="middle">CL</text>
+<text x="160" y="120" font-family="system-ui,sans-serif" font-size="28" font-weight="700" fill="#f1f5f9">Chrisputer Labs</text>
+${category ? `<rect x="80" y="180" width="${category.length * 11 + 24}" height="32" rx="16" fill="rgba(37,99,235,0.15)"/>
+<text x="92" y="201" font-family="system-ui,sans-serif" font-size="16" font-weight="500" fill="#60a5fa">${category}</text>` : ''}
+<text x="80" y="${category ? '260' : '220'}" font-family="system-ui,sans-serif" font-size="42" font-weight="800" fill="#f1f5f9">${title}</text>
+${summaryText ? `<text x="80" y="${category ? '310' : '270'}" font-family="system-ui,sans-serif" font-size="22" fill="#94a3b8">${summaryText}</text>` : ''}
+<rect x="80" y="460" width="240" height="52" rx="12" fill="#2563eb"/>
+<text x="200" y="493" font-family="system-ui,sans-serif" font-size="20" font-weight="600" fill="#fff" text-anchor="middle">${escapeHtml(subtitle)}</text>
+<text x="1080" y="560" font-family="system-ui,sans-serif" font-size="16" fill="#64748b" text-anchor="end">chrisputer.tech</text>
+</svg>`;
+
+  return new Response(svg, {
+    headers: {
+      'Content-Type': 'image/svg+xml',
+      'Cache-Control': 'public, max-age=3600',
+    },
+  });
 }
 
 async function generateSitemap(origin: string, env: Env): Promise<Response> {
@@ -174,23 +311,31 @@ ${entries}
   });
 }
 
-function htmlResponse(body: string, status = 200): Response {
-  return new Response(body, {
-    status,
-    headers: { 'Content-Type': 'text/html;charset=utf-8' },
-  });
+function htmlResponse(body: string, status = 200, analyticsToken?: string, adsensePublisherId?: string, lastModifiedSec?: number): Response {
+  let out = body;
+  if (adsensePublisherId) {
+    out = out.replace('</head>', `<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-${adsensePublisherId}" crossorigin="anonymous"></script>\n</head>`);
+  }
+  if (analyticsToken) {
+    out = out.replace('</body>', `<script defer src="https://static.cloudflareinsights.com/beacon.min.js" data-cf-beacon='{"token":"${analyticsToken}"}'></script></body>`);
+  }
+  const headers: Record<string, string> = { 'Content-Type': 'text/html;charset=utf-8' };
+  if (lastModifiedSec) {
+    headers['Last-Modified'] = new Date(lastModifiedSec * 1000).toUTCString();
+  }
+  return new Response(out, { status, headers });
 }
 
-const FAVICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="6" fill="#2563eb"/><text x="16" y="22" font-family="system-ui,sans-serif" font-size="16" font-weight="800" fill="#fff" text-anchor="middle">Ex</text></svg>`;
+const FAVICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="6" fill="#2563eb"/><text x="16" y="22" font-family="system-ui,sans-serif" font-size="14" font-weight="800" fill="#fff" text-anchor="middle">CL</text></svg>`;
 
 const OG_IMAGE_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" width="1200" height="630">
 <rect width="1200" height="630" fill="#020617"/>
 <rect x="40" y="40" width="1120" height="550" rx="24" fill="#0f172a" stroke="#1e293b" stroke-width="2"/>
 <rect x="80" y="100" width="80" height="80" rx="16" fill="#2563eb"/>
-<text x="120" y="158" font-family="system-ui,sans-serif" font-size="40" font-weight="800" fill="#fff" text-anchor="middle">Ex</text>
-<text x="180" y="155" font-family="system-ui,sans-serif" font-size="42" font-weight="700" fill="#f1f5f9">Exhaustive</text>
+<text x="120" y="158" font-family="system-ui,sans-serif" font-size="36" font-weight="800" fill="#fff" text-anchor="middle">CL</text>
+<text x="180" y="155" font-family="system-ui,sans-serif" font-size="42" font-weight="700" fill="#f1f5f9">Chrisputer Labs</text>
 <text x="80" y="280" font-family="system-ui,sans-serif" font-size="52" font-weight="800" fill="#f1f5f9">AI-Powered Product Research</text>
-<text x="80" y="350" font-family="system-ui,sans-serif" font-size="28" fill="#94a3b8">Brutally honest comparisons from real sources.</text>
+<text x="80" y="350" font-family="system-ui,sans-serif" font-size="28" fill="#94a3b8">20 years of IT expertise meets AI-driven analysis.</text>
 <text x="80" y="400" font-family="system-ui,sans-serif" font-size="28" fill="#94a3b8">No fluff. No sponsored picks. Just the truth.</text>
 <rect x="80" y="460" width="200" height="56" rx="12" fill="#2563eb"/>
 <text x="180" y="496" font-family="system-ui,sans-serif" font-size="22" font-weight="600" fill="#fff" text-anchor="middle">Try it free</text>

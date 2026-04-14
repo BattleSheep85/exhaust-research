@@ -84,6 +84,10 @@ Plus 1500ms post-complete delay + full page reload at the end.
 
 - [x] HIGH: CI pipeline references npm but no package.json exists — updated to use npx wrangler
 
+## Generator Findings (2026-04-14)
+
+- [x] MEDIUM: HEAD requests return 405 on every route — wrapped the worker `fetch` so HEAD runs the GET handler and the body is stripped at the outer layer; router accepts both methods. Verified live: HEAD returns 200 with headers + 0 bytes.
+
 ## Known Limitations (accepted)
 
 - MEDIUM: Rate limiting is global (30/hr), not per-IP — single actor can exhaust quota
