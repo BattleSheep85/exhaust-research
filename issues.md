@@ -1,6 +1,8 @@
 # Issues
 
-Last updated: 2026-04-14 (keep-improving R67)
+Last updated: 2026-04-14 (keep-improving R68)
+
+- [x] MED: 404 "Research not found" page had no search form and no query recovery — users hit a dead end with only Browse/Home buttons (`src/worker.ts`). Now strips the slug hash suffix to infer the likely query, surfaces "Did you mean …?" with one-click Research and Search-existing CTAs, and inlines the compact search bar. Resolved R68.
 
 - [x] LOW: Article JSON-LD lacked `inLanguage`, `articleSection`, and `keywords` — optional-but-useful fields that improve Google's topical understanding (`src/pages/research-result.ts`). Derives section from category and keywords from query tokens (stripped stopwords). Resolved R67.
 

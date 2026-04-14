@@ -1,5 +1,5 @@
 import type { Env, Tier } from './types';
-import { renderHome } from './pages/home';
+import { renderHome, searchBar } from './pages/home';
 import { renderResearchResult } from './pages/research-result';
 import { renderBrowse } from './pages/research-browse';
 import { renderAbout } from './pages/about';
@@ -170,13 +170,23 @@ async function handleRequest(request: Request, env: Env, ctx: ExecutionContext):
         const result = await renderResearchResult(slug, env, fromQuery);
         if (result instanceof Response) {
           if (result.status === 404) {
+            const guessQuery = slug.replace(/-[a-f0-9]{8,}$/, '').replace(/-/g, ' ').trim();
             return htmlResponse(
               layout('Research Not Found', 'No research exists at this URL. Browse the archive or start a new research query.', `<div class="container empty" style="padding:4rem 1.5rem;max-width:40rem;margin:0 auto;text-align:center">
 <h2 style="font-size:1.5rem;margin-bottom:.75rem">Research not found</h2>
 <p style="color:var(--text2);margin-bottom:1.5rem">No research exists at <code style="background:var(--surface);padding:.15rem .4rem;border-radius:4px">${escapeHtml(slug)}</code>. It may have been a shared link that was never completed, or the slug may be mistyped.</p>
-<div style="display:flex;gap:.5rem;flex-wrap:wrap;justify-content:center">
-<a href="/research" class="btn">Browse all research</a>
-<a href="/" class="btn btn-ghost">Start a new query</a>
+${guessQuery ? `<p style="color:var(--text2);margin-bottom:1rem;font-size:.92rem">Did you mean to research <strong style="color:var(--text)">&ldquo;${escapeHtml(guessQuery)}&rdquo;</strong>?</p>
+<div style="display:flex;gap:.5rem;flex-wrap:wrap;justify-content:center;margin-bottom:2rem">
+<a href="/research/new?q=${encodeURIComponent(guessQuery)}" class="btn">Research &ldquo;${escapeHtml(guessQuery)}&rdquo;</a>
+<a href="/research?q=${encodeURIComponent(guessQuery)}" class="btn btn-ghost">Search existing research</a>
+</div>` : ''}
+<div style="margin-top:1.5rem;padding-top:1.5rem;border-top:1px solid var(--surface2)">
+<p style="color:var(--text3);font-size:.85rem;margin-bottom:.75rem">Or try a different query:</p>
+${searchBar('compact')}
+</div>
+<div style="display:flex;gap:.5rem;flex-wrap:wrap;justify-content:center;margin-top:1.5rem">
+<a href="/research" class="btn btn-ghost">Browse all research</a>
+<a href="/" class="btn btn-ghost">Home</a>
 </div>
 </div>`, '<meta name="robots" content="noindex, follow">'),
               404, at, adPub,
