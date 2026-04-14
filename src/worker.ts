@@ -11,7 +11,7 @@ import { getTierConfig, isValidTier } from './lib/research-config';
 // Bump when the page template/schema shape changes in a way that should
 // invalidate every cached HTML blob. Old keys age out on their own TTL
 // (home: 5m, research result: 1h) so bumping is a soft cutover, not a purge.
-const CACHE_VERSION = 'v31';
+const CACHE_VERSION = 'v32';
 
 // Baseline security headers applied to every response (HTML, JSON, redirects,
 // static assets). HTML pages add a stricter CSP on top in htmlResponse(); these

@@ -198,8 +198,10 @@ ${searchBar('compact', tsKey)}
   const websiteJsonLd = `<script type="application/ld+json">${JSON.stringify({
     '@context': 'https://schema.org',
     '@type': 'WebSite',
+    '@id': 'https://chrisputer.tech/#website',
     name: 'Chrisputer Labs',
     url: 'https://chrisputer.tech',
+    inLanguage: 'en-US',
     description: 'AI-powered product research backed by 20 years of IT expertise.',
     publisher: { '@id': 'https://chrisputer.tech/#organization' },
     potentialAction: {

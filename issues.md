@@ -1,6 +1,8 @@
 # Issues
 
-Last updated: 2026-04-14 (keep-improving R81)
+Last updated: 2026-04-14 (keep-improving R82)
+
+- [x] LOW: Cross-page JSON-LD `@id` graph was broken — R81's Organization `founder.@id: https://chrisputer.tech/about#chris` pointed at an entity the AboutPage never defined (`src/pages/about.ts`), and the new home WebSite had no `@id` so other pages couldn't reference it. Added `@id` to AboutPage (self), `@id` to the Person, `@id` to WebSite (`src/pages/home.ts`), wired `isPartOf: #website` + `about: #organization` on AboutPage, and enriched Person with `knowsAbout` and `alumniOf: U.S. Army`. Also added `inLanguage: en-US` on WebSite. Now the graph closes: Organization.founder → AboutPage.mainEntity; AboutPage.isPartOf → WebSite; AboutPage.about → Organization; Organization.founder.worksFor → Organization (self-loop OK). Bumped CACHE_VERSION v31 → v32. Resolved R82.
 
 - [x] LOW: Home page Organization JSON-LD was minimal (`src/pages/home.ts`) — bare `logo` URL (no dimensions), no `image` (Google Knowledge Graph distinguishes logo from image), no `slogan`/`knowsAbout`/`alternateName`, and `founder` was a naked `{name: 'Chris'}` with no `@id`/`url`/`jobTitle` to cross-reference the AboutPage Person. Enriched all five — logo is now an ImageObject with 512×512 dimensions, image points to og-image.svg, founder has `@id: https://chrisputer.tech/about#chris` that matches the AboutPage mainEntity, plus topical `knowsAbout` array. Bumped CACHE_VERSION v30 → v31 to flush the KV cache. Resolved R81.
 

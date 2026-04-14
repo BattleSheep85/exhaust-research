@@ -5,14 +5,20 @@ export function renderAbout(): string {
   const authorJsonLd = `<script type="application/ld+json">${JSON.stringify({
     '@context': 'https://schema.org',
     '@type': 'AboutPage',
+    '@id': 'https://chrisputer.tech/about',
     name: 'About Chrisputer Labs',
     url: 'https://chrisputer.tech/about',
+    isPartOf: { '@id': 'https://chrisputer.tech/#website' },
+    about: { '@id': 'https://chrisputer.tech/#organization' },
     mainEntity: {
       '@type': 'Person',
+      '@id': 'https://chrisputer.tech/about#chris',
       name: 'Chris',
       jobTitle: 'IT Professional & Homelab Enthusiast',
       description: '20+ years in IT, Army veteran, founder of Chrisputer Labs.',
       url: 'https://chrisputer.tech/about',
+      knowsAbout: ['Product Research', 'Consumer Electronics', 'Homelab', 'Networking', 'IT Infrastructure'],
+      alumniOf: { '@type': 'Organization', name: 'U.S. Army' },
       worksFor: { '@id': 'https://chrisputer.tech/#organization' },
     },
   })}</script>`;
