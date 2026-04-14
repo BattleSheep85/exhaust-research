@@ -1,6 +1,8 @@
 # Issues
 
-Last updated: 2026-04-14 (keep-improving R60)
+Last updated: 2026-04-14 (keep-improving R61)
+
+- [x] LOW: Sitemap + Atom feed missing Last-Modified / 304 handling (`src/worker.ts`) — resolved R61: both endpoints now emit `Last-Modified` and return 304 Not Modified for conditional requests (verified live).
 
 ## SEO / Affiliate Surface (from discovery loop #2, 2026-04-14)
 

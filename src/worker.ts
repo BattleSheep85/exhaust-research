@@ -86,11 +86,11 @@ async function handleRequest(request: Request, env: Env, ctx: ExecutionContext):
       }
 
       if (path === '/sitemap.xml') {
-        return generateSitemap(url.origin, env);
+        return generateSitemap(url.origin, env, request.headers.get('If-Modified-Since'));
       }
 
       if (path === '/feed.xml') {
-        return generateAtomFeed(url.origin, env);
+        return generateAtomFeed(url.origin, env, request.headers.get('If-Modified-Since'));
       }
 
       // API routes
@@ -349,7 +349,7 @@ ${summaryText ? `<text x="80" y="${category ? '310' : '270'}" font-family="syste
   });
 }
 
-async function generateSitemap(origin: string, env: Env): Promise<Response> {
+async function generateSitemap(origin: string, env: Env, ifModifiedSince: string | null): Promise<Response> {
   // Only expose research pages with actual product cards. Honest-no-data results
   // (garbage queries, insufficient source data) are thin content and will hurt
   // ranking if Google crawls them.
@@ -368,6 +368,16 @@ async function generateSitemap(origin: string, env: Env): Promise<Response> {
   ).all<{ slug: string; created_at: number; lastmod: number }>();
 
   const results = rows.results ?? [];
+  const newestLastmod = results[0]?.lastmod ?? 0;
+  const lastModifiedHttp = new Date(newestLastmod * 1000).toUTCString();
+
+  if (ifModifiedSince && newestLastmod > 0) {
+    const since = Date.parse(ifModifiedSince);
+    if (!isNaN(since) && Math.floor(since / 1000) >= newestLastmod) {
+      return new Response(null, { status: 304, headers: { 'Last-Modified': lastModifiedHttp, 'Cache-Control': 'public, max-age=3600' } });
+    }
+  }
+
   const entries = results.map((r) => {
     const date = new Date(r.lastmod * 1000).toISOString().split('T')[0];
     return `<url><loc>${origin}/research/${r.slug}</loc><lastmod>${date}</lastmod><changefreq>monthly</changefreq></url>`;
@@ -375,7 +385,6 @@ async function generateSitemap(origin: string, env: Env): Promise<Response> {
 
   // Home and /research are dynamic indexes — their lastmod is the newest
   // research completion. Signals freshness to crawlers for recrawl scheduling.
-  const newestLastmod = results[0]?.lastmod;
   const dynamicLastmod = newestLastmod ? `<lastmod>${new Date(newestLastmod * 1000).toISOString().split('T')[0]}</lastmod>` : '';
 
   const xml = `<?xml version="1.0" encoding="UTF-8"?>
@@ -386,9 +395,9 @@ async function generateSitemap(origin: string, env: Env): Promise<Response> {
 ${entries}
 </urlset>`;
 
-  return new Response(xml, {
-    headers: { 'Content-Type': 'application/xml', 'Cache-Control': 'public, max-age=3600' },
-  });
+  const headers: Record<string, string> = { 'Content-Type': 'application/xml', 'Cache-Control': 'public, max-age=3600' };
+  if (newestLastmod > 0) headers['Last-Modified'] = lastModifiedHttp;
+  return new Response(xml, { headers });
 }
 
 function escapeXml(s: string): string {
@@ -400,7 +409,7 @@ function escapeXml(s: string): string {
     .replace(/'/g, '&apos;');
 }
 
-async function generateAtomFeed(origin: string, env: Env): Promise<Response> {
+async function generateAtomFeed(origin: string, env: Env, ifModifiedSince: string | null): Promise<Response> {
   const rows = await env.DB.prepare(
     `WITH ranked AS (
        SELECT r.slug, r.query, r.summary, r.created_at, COALESCE(r.completed_at, r.created_at) AS updated,
@@ -418,6 +427,13 @@ async function generateAtomFeed(origin: string, env: Env): Promise<Response> {
   const results = rows.results ?? [];
   const latestUpdated = results[0]?.updated ?? Math.floor(Date.now() / 1000);
   const feedUpdated = new Date(latestUpdated * 1000).toISOString();
+  const lastModifiedHttp = new Date(latestUpdated * 1000).toUTCString();
+  if (ifModifiedSince) {
+    const since = Date.parse(ifModifiedSince);
+    if (!isNaN(since) && Math.floor(since / 1000) >= latestUpdated) {
+      return new Response(null, { status: 304, headers: { 'Last-Modified': lastModifiedHttp, 'Cache-Control': 'public, max-age=3600' } });
+    }
+  }
 
   const entries = results.map((r) => {
     const published = new Date(r.created_at * 1000).toISOString();
@@ -447,7 +463,11 @@ ${entries}
 </feed>`;
 
   return new Response(xml, {
-    headers: { 'Content-Type': 'application/atom+xml;charset=utf-8', 'Cache-Control': 'public, max-age=3600' },
+    headers: {
+      'Content-Type': 'application/atom+xml;charset=utf-8',
+      'Cache-Control': 'public, max-age=3600',
+      'Last-Modified': lastModifiedHttp,
+    },
   });
 }
 
