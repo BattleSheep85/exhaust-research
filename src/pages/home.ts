@@ -130,8 +130,11 @@ export async function renderHome(env: Env): Promise<string> {
      ORDER BY view_count DESC LIMIT 6`
   ).all<ResearchRow & { product_count: number }>();
 
-  const recentCards = (recent.results ?? []).map(researchCard).join('');
-  const popularCards = (popular.results ?? []).map(researchCard).join('');
+  const recentRows = recent.results ?? [];
+  const recentKeys = new Set(recentRows.map((r) => r.canonical_query ?? r.slug));
+  const popularRows = (popular.results ?? []).filter((r) => !recentKeys.has(r.canonical_query ?? r.slug));
+  const recentCards = recentRows.map(researchCard).join('');
+  const popularCards = popularRows.map(researchCard).join('');
   const tsKey = env.TURNSTILE_SITE_KEY;
 
   const body = `
