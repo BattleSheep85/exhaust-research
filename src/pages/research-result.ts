@@ -1,6 +1,6 @@
 import { type Env, type ResearchRow, type ProductRow, type BuyersGuide, DEFAULT_AFFILIATE_TAG } from '../types';
 import { layout, html, type LayoutMeta } from '../lib/html';
-import { parseJsonSafe, isValidHttpUrl, escapeHtml, timeAgo } from '../lib/utils';
+import { parseJsonSafe, isValidHttpUrl, escapeHtml, timeAgo, displayQuery } from '../lib/utils';
 import { searchBar } from './home';
 
 // Allowlist of retailer hostnames we recognize as "buy" destinations.
@@ -288,7 +288,8 @@ export async function renderResearchResult(slug: string, env: Env, fromQuery: st
   const affiliateTag = env.AMAZON_AFFILIATE_TAG || DEFAULT_AFFILIATE_TAG;
   const walmartId = env.WALMART_IMPACT_ID;
   const pageUrl = `https://chrisputer.tech/research/${escapeHtml(slug)}`;
-  const shareText = encodeURIComponent(entry.query);
+  const displayTitle = displayQuery(entry.query);
+  const shareText = encodeURIComponent(displayTitle);
   const shareUrl = encodeURIComponent(pageUrl);
 
   const body = `<div class="container" style="max-width:64rem;padding:3rem 1.5rem">
@@ -297,10 +298,10 @@ export async function renderResearchResult(slug: string, env: Env, fromQuery: st
 <span aria-hidden="true" style="margin:0 .4rem;color:var(--text3)">/</span>
 <a href="/research" style="color:var(--text2)">Research</a>
 <span aria-hidden="true" style="margin:0 .4rem;color:var(--text3)">/</span>
-<span style="color:var(--text)">${escapeHtml(entry.query)}</span>
+<span style="color:var(--text)">${escapeHtml(displayTitle)}</span>
 </nav>
 <div class="page-header">
-<h1>${escapeHtml(entry.query)}</h1>
+<h1>${escapeHtml(displayTitle)}</h1>
 ${entry.category ? `<span class="card-badge">${escapeHtml(entry.category)}</span>` : ''}
 <div class="page-meta">
 <span>Published ${date}</span>
@@ -426,7 +427,7 @@ ${searchBar('compact', env.TURNSTILE_SITE_KEY)}
   const jsonLd = JSON.stringify({
     '@context': 'https://schema.org',
     '@type': 'Article',
-    headline: entry.query,
+    headline: displayTitle,
     description: entry.summary ?? '',
     datePublished: isoDate,
     dateModified: isoModified,
@@ -447,7 +448,7 @@ ${searchBar('compact', env.TURNSTILE_SITE_KEY)}
     itemListElement: [
       { '@type': 'ListItem', position: 1, name: 'Home', item: 'https://chrisputer.tech/' },
       { '@type': 'ListItem', position: 2, name: 'Research', item: 'https://chrisputer.tech/research' },
-      { '@type': 'ListItem', position: 3, name: entry.query, item: pageUrl },
+      { '@type': 'ListItem', position: 3, name: displayTitle, item: pageUrl },
     ],
   });
 
@@ -540,6 +541,6 @@ document.addEventListener('DOMContentLoaded',function(){
   // Keep thin (zero-product) and failed pages out of the index. Direct links still work.
   const isThin = entry.status === 'complete' && products.length === 0;
   const noindex = (isThin || isFailed || isProcessing) ? '<meta name="robots" content="noindex, follow">' : '';
-  const htmlOut = layout(entry.query, entry.summary ?? 'AI-powered product research', body, canonical + noindex + structuredData + turnstileScript + extra, layoutMeta);
+  const htmlOut = layout(displayTitle, entry.summary ?? 'AI-powered product research', body, canonical + noindex + structuredData + turnstileScript + extra, layoutMeta);
   return { html: htmlOut, lastModified: lastModifiedTs };
 }

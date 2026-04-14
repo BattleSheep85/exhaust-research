@@ -1,9 +1,12 @@
 import type { ScrapedSource, ResearchResult, ProductResult } from '../types';
 
 const MAX_SOURCE_CONTEXT = 80_000;
-const CURRENT_YEAR = new Date().getUTCFullYear();
 
-const SYSTEM_PROMPT = `You are an expert product researcher. Analyze scraped product data and produce honest, actionable research reports.
+// NOTE: Don't build the system prompt at module init — `new Date()` is frozen
+// at the Unix epoch (1970) before the first request handler runs in CF Workers.
+function buildSystemPrompt(): string {
+  const currentYear = new Date().getUTCFullYear();
+  return `You are an expert product researcher. Analyze scraped product data and produce honest, actionable research reports.
 
 RULES:
 - Be brutally honest. If a product has problems, say so.
@@ -12,7 +15,8 @@ RULES:
 - Include specific model numbers, prices, and specs when available.
 - If data is insufficient, say so clearly.
 - Rank products by overall recommendation, #1 being top pick.
-- PRIORITIZE RECENT DATA: The current year is ${CURRENT_YEAR}. Heavily weight sources tagged with recent dates (look for [X weeks ago], [X days ago], [${CURRENT_YEAR}]). Discount sources older than 18 months unless they're evergreen. Call out when the most recent reliable data is stale.
+- COMPLETENESS IS REQUIRED: every product MUST have all of these populated — name, brand, price (your best informed estimate in USD; never null), rating (0-5 scale; your informed estimate if reviews aren't explicit), at least 3 pros, at least 2 cons, and a verdict of 15+ words. Products missing any of these will be discarded. When you don't have a source number, make an honest inference from comparable products or typical market data, never leave blank.
+- PRIORITIZE RECENT DATA: The current year is ${currentYear}. Heavily weight sources tagged with recent dates (look for [X weeks ago], [X days ago], [${currentYear}]). Discount sources older than 18 months unless they're evergreen. Call out when the most recent reliable data is stale.
 - Note release dates and availability when known. Avoid recommending discontinued products.
 - Sources come from multiple types: web, news, video (YouTube reviews), hackernews. News and video sources are typically the most recent — lean on them for what's actually available today.
 
@@ -37,6 +41,7 @@ OUTPUT: Respond ONLY with valid JSON matching this schema:
   ],
   "methodology": "Sources analyzed and confidence level"
 }`;
+}
 
 interface OpenRouterResponse {
   choices: Array<{ message: { content: string } }>;
@@ -71,13 +76,13 @@ export async function runResearch(
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${apiKey}`,
-      'HTTP-Referer': 'https://research.chrisputer.tech',
-      'X-Title': 'Exhaustive',
+      'HTTP-Referer': 'https://chrisputer.tech',
+      'X-Title': 'Chrisputer Labs',
     },
     body: JSON.stringify({
       model: 'google/gemini-2.5-flash',
       messages: [
-        { role: 'system', content: SYSTEM_PROMPT },
+        { role: 'system', content: buildSystemPrompt() },
         {
           role: 'user',
           content: `Research query: "${query}"\n\nSource data:\n\n${lines.join('\n\n')}\n\nAnalyze and produce a product research report. Respond ONLY with valid JSON.`,

@@ -4,6 +4,13 @@
 	"compatibility_date": "2026-04-06",
 	"compatibility_flags": ["global_fetch_strictly_public"],
 	"observability": { "enabled": true },
+	"limits": { "cpu_ms": 30000 },
+	"kv_namespaces": [
+		{
+			"binding": "CACHE",
+			"id": "6747f71dec1d488fb8af9439809c79f3"
+		}
+	],
 	"d1_databases": [
 		{
 			"binding": "DB",
@@ -11,9 +18,17 @@
 			"database_id": "27f94ec5-05e4-4064-9de8-a29f5a15417d"
 		}
 	],
+	"routes": [
+		{ "pattern": "chrisputer.tech/*", "zone_name": "chrisputer.tech" },
+		{ "pattern": "www.chrisputer.tech/*", "zone_name": "chrisputer.tech" },
+		{ "pattern": "research.chrisputer.tech/*", "zone_name": "chrisputer.tech" }
+	],
 	"vars": {
-		"AMAZON_AFFILIATE_TAG": "chrisputer-20",
-		"TURNSTILE_SITE_KEY": ""
+		"AMAZON_AFFILIATE_TAG": "battlesheep0a-20",
+		"TURNSTILE_SITE_KEY": "",
+		"CF_ANALYTICS_TOKEN": "ea97bb136135401584c3547bd0d73b66",
+		"WALMART_IMPACT_ID": "",
+		"ADSENSE_PUBLISHER_ID": "pub-6952672558994325"
 	}
 	// OPENROUTER_API_KEY: Set via `wrangler secret put OPENROUTER_API_KEY`
 	// TURNSTILE_SECRET_KEY: Set via `wrangler secret put TURNSTILE_SECRET_KEY`

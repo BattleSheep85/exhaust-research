@@ -1,6 +1,8 @@
 import type { ScrapedSource } from '../types';
 
-const CURRENT_YEAR = new Date().getUTCFullYear();
+// NOTE: Do NOT evaluate `new Date()` at module load. Cloudflare Workers freeze
+// the clock at the Unix epoch (1970) during module initialization — real time
+// is only available inside a request handler. Always compute year at call time.
 const TIMEOUT_MS = 8000;
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -20,7 +22,7 @@ interface BraveWebResponse {
   web?: { results?: BraveWebResult[] };
 }
 
-async function braveWeb(query: string, apiKey: string, freshness = 'py'): Promise<ScrapedSource[]> {
+export async function braveWeb(query: string, apiKey: string, freshness = 'py'): Promise<ScrapedSource[]> {
   try {
     const params = new URLSearchParams({
       q: query,
@@ -36,10 +38,15 @@ async function braveWeb(query: string, apiKey: string, freshness = 'py'): Promis
         'X-Subscription-Token': apiKey,
       },
     });
-    if (!response.ok) return [];
+    if (!response.ok) {
+      const body = await response.text().catch(() => '');
+      console.log(`[braveWeb] HTTP ${response.status} q="${query}" body=${body.slice(0, 200)}`);
+      return [];
+    }
 
     const data: BraveWebResponse = await response.json();
     const results = data?.web?.results ?? [];
+    console.log(`[braveWeb] q="${query}" freshness=${freshness} → ${results.length} results`);
 
     return results.slice(0, 8).map((r) => ({
       url: r.url,
@@ -51,7 +58,8 @@ async function braveWeb(query: string, apiKey: string, freshness = 'py'): Promis
       ].filter(Boolean).join('\n\n'),
       source: 'web',
     }));
-  } catch {
+  } catch (err) {
+    console.log(`[braveWeb] ERROR q="${query}": ${err instanceof Error ? err.message : String(err)}`);
     return [];
   }
 }
@@ -72,7 +80,7 @@ interface BraveNewsResponse {
   results?: BraveNewsResult[];
 }
 
-async function braveNews(query: string, apiKey: string): Promise<ScrapedSource[]> {
+export async function braveNews(query: string, apiKey: string): Promise<ScrapedSource[]> {
   try {
     const params = new URLSearchParams({
       q: query,
@@ -88,10 +96,15 @@ async function braveNews(query: string, apiKey: string): Promise<ScrapedSource[]
         'X-Subscription-Token': apiKey,
       },
     });
-    if (!response.ok) return [];
+    if (!response.ok) {
+      const body = await response.text().catch(() => '');
+      console.log(`[braveNews] HTTP ${response.status} q="${query}" body=${body.slice(0, 200)}`);
+      return [];
+    }
 
     const data: BraveNewsResponse = await response.json();
     const results = data?.results ?? [];
+    console.log(`[braveNews] q="${query}" → ${results.length} results`);
 
     return results.slice(0, 6).map((r) => ({
       url: r.url,
@@ -103,7 +116,8 @@ async function braveNews(query: string, apiKey: string): Promise<ScrapedSource[]
       ].filter(Boolean).join('\n\n'),
       source: 'news',
     }));
-  } catch {
+  } catch (err) {
+    console.log(`[braveNews] ERROR q="${query}": ${err instanceof Error ? err.message : String(err)}`);
     return [];
   }
 }
@@ -124,7 +138,7 @@ interface BraveVideoResponse {
   results?: BraveVideoResult[];
 }
 
-async function braveVideos(query: string, apiKey: string): Promise<ScrapedSource[]> {
+export async function braveVideos(query: string, apiKey: string): Promise<ScrapedSource[]> {
   try {
     const params = new URLSearchParams({
       q: query,
@@ -139,10 +153,15 @@ async function braveVideos(query: string, apiKey: string): Promise<ScrapedSource
         'X-Subscription-Token': apiKey,
       },
     });
-    if (!response.ok) return [];
+    if (!response.ok) {
+      const body = await response.text().catch(() => '');
+      console.log(`[braveVideos] HTTP ${response.status} q="${query}" body=${body.slice(0, 200)}`);
+      return [];
+    }
 
     const data: BraveVideoResponse = await response.json();
     const results = data?.results ?? [];
+    console.log(`[braveVideos] q="${query}" → ${results.length} results`);
 
     return results.slice(0, 6).map((r) => ({
       url: r.url,
@@ -155,7 +174,8 @@ async function braveVideos(query: string, apiKey: string): Promise<ScrapedSource
       ].filter(Boolean).join('\n'),
       source: 'video',
     }));
-  } catch {
+  } catch (err) {
+    console.log(`[braveVideos] ERROR q="${query}": ${err instanceof Error ? err.message : String(err)}`);
     return [];
   }
 }
@@ -178,7 +198,7 @@ interface HNResponse {
   hits?: HNHit[];
 }
 
-async function hackerNews(query: string): Promise<ScrapedSource[]> {
+export async function hackerNews(query: string): Promise<ScrapedSource[]> {
   try {
     const params = new URLSearchParams({
       query,
@@ -191,10 +211,14 @@ async function hackerNews(query: string): Promise<ScrapedSource[]> {
       signal: AbortSignal.timeout(TIMEOUT_MS),
       headers: { Accept: 'application/json' },
     });
-    if (!response.ok) return [];
+    if (!response.ok) {
+      console.log(`[hackerNews] HTTP ${response.status} q="${query}"`);
+      return [];
+    }
 
     const data: HNResponse = await response.json();
     const hits = data?.hits ?? [];
+    console.log(`[hackerNews] q="${query}" → ${hits.length} hits (before filter)`);
 
     return hits
       .filter((h) => h.title && (h.points ?? 0) >= 10)
@@ -210,7 +234,8 @@ async function hackerNews(query: string): Promise<ScrapedSource[]> {
         ].filter(Boolean).join('\n'),
         source: 'hackernews',
       }));
-  } catch {
+  } catch (err) {
+    console.log(`[hackerNews] ERROR q="${query}": ${err instanceof Error ? err.message : String(err)}`);
     return [];
   }
 }
@@ -219,39 +244,70 @@ async function hackerNews(query: string): Promise<ScrapedSource[]> {
 // Orchestrator — fan out to every source in parallel
 // ─────────────────────────────────────────────────────────────────────────────
 
+// Brave free tier: 1 req/sec. Serialize calls with spacing so they don't 429.
+export const BRAVE_SPACING_MS = 1100;
+export const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
 export async function scrapeSearchResults(query: string, braveApiKey: string): Promise<ScrapedSource[]> {
+  // Compute current year inside the handler — module-level Date is frozen at epoch in CF Workers.
+  const currentYear = new Date().getUTCFullYear();
+
   // Multiple query angles to get broad coverage
   const directQuery = query;
-  const reviewQuery = `${query} review ${CURRENT_YEAR}`;
-  const bestQuery = `best ${query} ${CURRENT_YEAR}`;
+  const reviewQuery = `${query} review ${currentYear}`;
+  const bestQuery = `best ${query} ${currentYear}`;
   const versusQuery = `${query} vs alternatives comparison`;
 
-  const results = await Promise.allSettled([
-    // Web search — 4 query angles
-    braveWeb(directQuery, braveApiKey),
-    braveWeb(reviewQuery, braveApiKey),
-    braveWeb(bestQuery, braveApiKey, 'pm'), // past month for freshest picks
-    braveWeb(versusQuery, braveApiKey),
-    // News — recent releases and launches
-    braveNews(`${query} ${CURRENT_YEAR}`, braveApiKey),
-    // Videos — YouTube reviews
-    braveVideos(`${query} review`, braveApiKey),
-    // HackerNews — tech community discussions
-    hackerNews(query),
-  ]);
+  // HN runs in parallel — different provider, no shared rate limit
+  const hnPromise = hackerNews(query);
+
+  // Brave calls must be SERIAL (free tier = 1 req/sec)
+  // Order from most-likely-to-have-results to nice-to-have, so early ones
+  // always run even if a later one somehow blocks.
+  type BraveCall = { label: string; fn: () => Promise<ScrapedSource[]> };
+  const braveCalls: BraveCall[] = [
+    { label: 'web:best-pm', fn: () => braveWeb(bestQuery, braveApiKey, 'pm') }, // freshest
+    { label: 'news', fn: () => braveNews(`${query} ${currentYear}`, braveApiKey) },
+    { label: 'videos', fn: () => braveVideos(`${query} review`, braveApiKey) },
+    { label: 'web:review', fn: () => braveWeb(reviewQuery, braveApiKey) },
+    { label: 'web:direct', fn: () => braveWeb(directQuery, braveApiKey) },
+    { label: 'web:versus', fn: () => braveWeb(versusQuery, braveApiKey) },
+  ];
 
   const sources: ScrapedSource[] = [];
-  for (const result of results) {
-    if (result.status === 'fulfilled') {
-      sources.push(...result.value);
+  for (let i = 0; i < braveCalls.length; i++) {
+    const call = braveCalls[i];
+    try {
+      const result = await call.fn();
+      console.log(`[scrape] ${call.label} → ${result.length}`);
+      sources.push(...result);
+    } catch (err) {
+      console.log(`[scrape] ${call.label} FAILED: ${err instanceof Error ? err.message : String(err)}`);
     }
+    // Space out requests so Brave free tier (1 req/sec) is happy.
+    if (i < braveCalls.length - 1) await sleep(BRAVE_SPACING_MS);
+  }
+
+  // Collect HN result (started at the beginning, should be done by now)
+  try {
+    const hnResults = await hnPromise;
+    console.log(`[scrape] hn → ${hnResults.length}`);
+    sources.push(...hnResults);
+  } catch (err) {
+    console.log(`[scrape] hn FAILED: ${err instanceof Error ? err.message : String(err)}`);
   }
 
   // Deduplicate by URL
   const seen = new Set<string>();
-  return sources.filter((s) => {
+  const deduped = sources.filter((s) => {
     if (seen.has(s.url)) return false;
     seen.add(s.url);
     return true;
   });
+  const counts = deduped.reduce<Record<string, number>>((acc, s) => {
+    acc[s.source] = (acc[s.source] ?? 0) + 1;
+    return acc;
+  }, {});
+  console.log(`[scrape] deduped total=${deduped.length} by-type=${JSON.stringify(counts)}`);
+  return deduped;
 }

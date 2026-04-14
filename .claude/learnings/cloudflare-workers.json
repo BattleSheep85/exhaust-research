@@ -1,0 +1,20 @@
+{
+  "domain": "cloudflare-workers",
+  "description": "Cloudflare Workers runtime gotchas and platform quirks",
+  "file_patterns": [
+    "src/**/*.ts",
+    "src/**/*.js"
+  ],
+  "entries": [
+    {
+      "id": "date-frozen-at-module-init",
+      "bad_pattern": "Calling new Date() or Date.now() at module top-level to compute values like CURRENT_YEAR",
+      "good_pattern": "Compute time-dependent values inside request handlers, not at module init",
+      "regex": "^(const|let|var)\\s+\\w+\\s*=\\s*new Date\\(\\)",
+      "description": "Cloudflare Workers freeze the clock at the Unix epoch (Jan 1 1970) during module initialization — real time is only available once a request handler runs. Any `new Date()` or `Date.now()` call at the top level of a module (e.g. `const CURRENT_YEAR = new Date().getUTCFullYear()`) will return 1970, not the actual current year. This silently corrupts downstream logic like search queries that interpolate the year, LLM system prompts that reference 'the current year', rate-limit windows, cache keys, etc. Always move time-dependent computation inside a function that runs per-request. This is part of CF Workers' security model to prevent timing side channels before the first I/O.",
+      "context": "Cloudflare Workers, src/lib/*.ts, module-level constants",
+      "discovered": "2026-04-11",
+      "severity": "HIGH"
+    }
+  ]
+}
