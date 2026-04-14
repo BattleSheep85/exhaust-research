@@ -436,7 +436,6 @@ ${searchBar('compact', env.TURNSTILE_SITE_KEY)}
       };
       item.offers = offer;
     }
-    if (p.rating != null) item.aggregateRating = { '@type': 'AggregateRating', ratingValue: p.rating, bestRating: 5, worstRating: 0, reviewCount: 1 };
     if (p.verdict) {
       const review: Record<string, unknown> = {
         '@type': 'Review',

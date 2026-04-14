@@ -1,6 +1,8 @@
 # Issues
 
-Last updated: 2026-04-14 (keep-improving R70)
+Last updated: 2026-04-14 (keep-improving R71)
+
+- [x] HIGH: Product JSON-LD emitted `aggregateRating` with `reviewCount: 1` from a single self-authored review (`src/pages/research-result.ts`). Google's structured-data guidelines explicitly prohibit aggregate ratings based on a single review or self-reviews, and it can trigger a manual action. Removed aggregateRating entirely; the editorial Review with reviewRating remains (valid first-party review schema). Resolved R71.
 
 - [x] MED: Trailing-slash URLs served duplicate content — `/research/` returned 200 with identical body as `/research`, and `/research/slug/` returned 404 (`src/worker.ts`). Now 301-redirects all non-root trailing-slash paths to the canonical no-slash variant, preserving query string. Fixes crawl budget waste and broken shared links. Resolved R70.
 
