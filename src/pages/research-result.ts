@@ -182,7 +182,7 @@ function retailerLabel(url: string): string {
   } catch { return 'Retailer'; }
 }
 
-function renderProduct(p: ProductRow, affiliateTag: string, walmartImpactId: string | undefined, isService: boolean): string {
+function renderProduct(p: ProductRow, index: number, affiliateTag: string, walmartImpactId: string | undefined, isService: boolean): string {
   const pros = parseJsonSafe<string[]>(p.pros, []);
   const cons = parseJsonSafe<string[]>(p.cons, []);
   const specs = parseJsonSafe<Record<string, string>>(p.specs, {});
@@ -237,7 +237,7 @@ function renderProduct(p: ProductRow, affiliateTag: string, walmartImpactId: str
     links.push(`<a href="${escapeHtml(ctaUrl)}" target="_blank" rel="${ctaRel}" class="${cls}">${escapeHtml(ctaLabel)} <span aria-hidden="true">&#8599;</span></a>`);
   }
 
-  return `<article class="product">
+  return `<article class="product" id="product-${index + 1}">
 <div class="product-header">
 <div>
 ${p.rank != null ? `<span class="product-rank ${rankClass}">#${p.rank}</span>` : ''}
@@ -363,10 +363,10 @@ ${isFailed ? `<div style="padding:1.5rem;background:rgba(239,68,68,.1);border:1p
 <a href="/research/new?q=${encodeURIComponent(entry.query)}" class="btn" style="margin-top:1rem">Try again</a>
 </div>` : ''}
 
-${entry.summary ? `<div class="summary-box"><h2>Summary</h2><p>${escapeHtml(entry.summary)}</p></div>` : ''}
+${entry.summary ? `<div class="summary-box"><h2 id="summary">Summary</h2><p>${escapeHtml(entry.summary)}</p></div>` : ''}
 
 ${hasBuyersGuide && buyersGuide ? `<section class="buyers-guide" style="background:var(--surface);border:1px solid var(--surface2);border-radius:var(--radius);padding:1.5rem;margin-bottom:2rem">
-<h2 style="font-size:1.1rem;font-weight:600;margin-bottom:1rem">Buyer's guide</h2>
+<h2 id="buyers-guide" style="font-size:1.1rem;font-weight:600;margin-bottom:1rem">Buyer's guide</h2>
 ${buyersGuide.howToChoose ? `<h3 style="font-size:.85rem;font-weight:600;color:var(--text);text-transform:uppercase;letter-spacing:.05em;margin-bottom:.5rem">How to choose</h3>
 <p style="color:var(--text2);font-size:.92rem;line-height:1.65;margin-bottom:1.25rem">${escapeHtml(buyersGuide.howToChoose)}</p>` : ''}
 ${(buyersGuide.pitfalls?.length ?? 0) > 0 ? `<h3 style="font-size:.85rem;font-weight:600;color:var(--warning);text-transform:uppercase;letter-spacing:.05em;margin-bottom:.5rem">Common pitfalls</h3>
@@ -375,16 +375,16 @@ ${(buyersGuide.marketingToIgnore?.length ?? 0) > 0 ? `<h3 style="font-size:.85re
 <ul style="color:var(--text2);font-size:.92rem;line-height:1.65;padding-left:1.1rem">${buyersGuide.marketingToIgnore.map((p) => `<li style="margin-bottom:.35rem">${escapeHtml(p)}</li>`).join('')}</ul>` : ''}
 </section>` : ''}
 
-${products.length > 0 ? `<h2 style="font-size:1.25rem;font-weight:700;margin-bottom:1.5rem">${isService ? 'Recommendations' : 'Products compared'}</h2>
-<div class="product-grid">${products.map((p) => renderProduct(p, affiliateTag, walmartId, isService)).join('')}</div>` : ''}
+${products.length > 0 ? `<h2 id="products" style="font-size:1.25rem;font-weight:700;margin-bottom:1.5rem">${isService ? 'Recommendations' : 'Products compared'}</h2>
+<div class="product-grid">${products.map((p, i) => renderProduct(p, i, affiliateTag, walmartId, isService)).join('')}</div>` : ''}
 
 ${(resultData.methodology || sourceList.length > 0) ? `<div class="sources" style="margin-top:2rem">
-${resultData.methodology ? `<h3>Methodology</h3><p style="font-size:.85rem;color:var(--text2);margin-bottom:1rem">${escapeHtml(resultData.methodology)}</p>` : ''}
-${sourceList.length > 0 ? `<h3>Sources (${sourceList.length})</h3>${sourceList.map((u) => `<a href="${escapeHtml(u)}" target="_blank" rel="${sourceRel(u)}">${escapeHtml(sourceLabel(u))}</a>`).join('')}` : ''}
+${resultData.methodology ? `<h3 id="methodology">Methodology</h3><p style="font-size:.85rem;color:var(--text2);margin-bottom:1rem">${escapeHtml(resultData.methodology)}</p>` : ''}
+${sourceList.length > 0 ? `<h3 id="sources">Sources (${sourceList.length})</h3>${sourceList.map((u) => `<a href="${escapeHtml(u)}" target="_blank" rel="${sourceRel(u)}">${escapeHtml(sourceLabel(u))}</a>`).join('')}` : ''}
 </div>` : ''}
 
 ${related.length > 0 ? `<section class="related-research" style="margin-top:3rem;padding-top:2rem;border-top:1px solid var(--surface2)">
-<h2 style="font-size:1.1rem;font-weight:600;margin-bottom:1rem">Related research</h2>
+<h2 id="related" style="font-size:1.1rem;font-weight:600;margin-bottom:1rem">Related research</h2>
 <div class="grid">${related.map((r) => `<a class="card" href="/research/${escapeHtml(r.slug)}">
 ${r.category ? `<div class="card-top"><span class="card-badge">${escapeHtml(r.category)}</span><span class="card-time">${timeAgo(r.created_at * 1000)}</span></div>` : `<div class="card-top"><span class="card-time">${timeAgo(r.created_at * 1000)}</span></div>`}
 <h3>${escapeHtml(displayQuery(r.query))}</h3>
