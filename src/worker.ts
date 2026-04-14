@@ -425,7 +425,7 @@ function htmlResponse(body: string, status = 200, analyticsToken?: string, adsen
     headers['Last-Modified'] = new Date(lastModifiedSec * 1000).toUTCString();
     headers['Cache-Control'] = 'public, max-age=300, s-maxage=3600, stale-while-revalidate=86400';
   } else if (status === 200) {
-    headers['Cache-Control'] = 'public, max-age=60, s-maxage=600, stale-while-revalidate=3600';
+    headers['Cache-Control'] = 'public, max-age=60, s-maxage=60, stale-while-revalidate=3600';
   } else {
     headers['Cache-Control'] = 'no-store';
   }

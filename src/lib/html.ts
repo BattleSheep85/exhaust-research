@@ -49,8 +49,9 @@ export function layout(title: string, description: string, body: string, extra_h
   const escapedDesc = escapeHtml(capDescription(description));
   const ogType = meta?.ogType ?? 'website';
   const ogUrl = meta?.ogUrl ? `\n<meta property="og:url" content="${escapeHtml(meta.ogUrl)}">` : '';
-  const ogImage = meta?.ogImage ?? '/og-image.svg';
-  const twitterCard = meta?.twitterCard ?? 'summary';
+  const rawOgImage = meta?.ogImage ?? '/og-image.svg';
+  const ogImage = rawOgImage.startsWith('http') ? rawOgImage : `https://chrisputer.tech${rawOgImage}`;
+  const twitterCard = meta?.twitterCard ?? 'summary_large_image';
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -61,10 +62,15 @@ export function layout(title: string, description: string, body: string, extra_h
 <meta property="og:title" content="${escapedTitle} | Chrisputer Labs">
 <meta property="og:description" content="${escapedDesc}">
 <meta property="og:type" content="${ogType}">${ogUrl}
+<meta property="og:site_name" content="Chrisputer Labs">
 <meta property="og:image" content="${escapeHtml(ogImage)}">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Chrisputer Labs — AI-powered product research">
 <meta name="twitter:card" content="${twitterCard}">
 <meta name="twitter:title" content="${escapedTitle} | Chrisputer Labs">
 <meta name="twitter:description" content="${escapedDesc}">
+<meta name="twitter:image" content="${escapeHtml(ogImage)}">
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <link rel="apple-touch-icon" href="/favicon.svg">
 <meta name="theme-color" content="#2563eb">
