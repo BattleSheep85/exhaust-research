@@ -1,6 +1,8 @@
 # Issues
 
-Last updated: 2026-04-14 (keep-improving R62)
+Last updated: 2026-04-14 (keep-improving R63)
+
+- [x] LOW: Research-result pages had no in-page Table of Contents despite having 5-6 anchor-linked sections (`src/pages/research-result.ts`). Added a conditional TOC nav that only renders when there are 3+ sections. Improves long-form skimmability and gives Google a signal for "Jump to" sitelinks. Resolved R63.
 
 - [x] LOW: Sitemap + Atom feed missing Last-Modified / 304 handling (`src/worker.ts`) — resolved R61: both endpoints now emit `Last-Modified` and return 304 Not Modified for conditional requests (verified live).
 - [x] LOW: Research-result heading outline broken — Methodology/Sources were h3 directly under h2 Products with no intervening structure, skipping levels. Promoted to h2 (`src/pages/research-result.ts`). Fixes HTML5 outline hierarchy for a11y/SEO. Resolved R62.

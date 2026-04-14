@@ -363,6 +363,21 @@ ${isFailed ? `<div style="padding:1.5rem;background:rgba(239,68,68,.1);border:1p
 <a href="/research/new?q=${encodeURIComponent(entry.query)}" class="btn" style="margin-top:1rem">Try again</a>
 </div>` : ''}
 
+${entry.status === 'complete' ? (() => {
+  const tocItems: Array<{ id: string; label: string }> = [];
+  if (entry.summary) tocItems.push({ id: 'summary', label: 'Summary' });
+  if (hasBuyersGuide) tocItems.push({ id: 'buyers-guide', label: "Buyer's guide" });
+  if (products.length > 0) tocItems.push({ id: 'products', label: isService ? 'Recommendations' : 'Products compared' });
+  if (resultData.methodology) tocItems.push({ id: 'methodology', label: 'Methodology' });
+  if (sourceList.length > 0) tocItems.push({ id: 'sources', label: `Sources (${sourceList.length})` });
+  if (related.length > 0) tocItems.push({ id: 'related', label: 'Related research' });
+  if (tocItems.length < 3) return '';
+  return `<nav class="toc" aria-label="Table of contents" style="margin:1.5rem 0;padding:.85rem 1rem;background:var(--surface);border:1px solid var(--surface2);border-radius:10px">
+<div style="font-size:.72rem;text-transform:uppercase;letter-spacing:.08em;color:var(--text3);font-weight:600;margin-bottom:.5rem">On this page</div>
+<ul style="list-style:none;padding:0;margin:0;display:flex;flex-wrap:wrap;gap:.5rem .9rem;font-size:.88rem">${tocItems.map((t) => `<li><a href="#${t.id}" style="color:var(--text2);text-decoration:none;border-bottom:1px dotted var(--text3)">${escapeHtml(t.label)}</a></li>`).join('')}</ul>
+</nav>`;
+})() : ''}
+
 ${entry.summary ? `<div class="summary-box"><h2 id="summary">Summary</h2><p>${escapeHtml(entry.summary)}</p></div>` : ''}
 
 ${hasBuyersGuide && buyersGuide ? `<section class="buyers-guide" style="background:var(--surface);border:1px solid var(--surface2);border-radius:var(--radius);padding:1.5rem;margin-bottom:2rem">
