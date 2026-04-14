@@ -292,8 +292,10 @@ export async function renderResearchResult(slug: string, env: Env, fromQuery: st
   const sourceList = parseJsonSafe<string[]>(entry.sources, []).filter(isValidHttpUrl);
 
   const date = new Date(entry.created_at * 1000).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+  const createdIso = new Date(entry.created_at * 1000).toISOString().slice(0, 10);
   const lastModifiedTs = entry.completed_at ?? entry.created_at;
   const lastUpdatedLabel = new Date(lastModifiedTs * 1000).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+  const lastUpdatedIso = new Date(lastModifiedTs * 1000).toISOString().slice(0, 10);
   const affiliateTag = env.AMAZON_AFFILIATE_TAG || DEFAULT_AFFILIATE_TAG;
   const walmartId = env.WALMART_IMPACT_ID;
   const pageUrl = `https://chrisputer.tech/research/${escapeHtml(slug)}`;
@@ -313,8 +315,8 @@ export async function renderResearchResult(slug: string, env: Env, fromQuery: st
 <h1>${escapeHtml(displayTitle)}</h1>
 ${entry.category ? `<span class="card-badge">${escapeHtml(entry.category)}</span>` : ''}
 <div class="page-meta">
-<span>Published ${date}</span>
-${entry.completed_at && entry.completed_at !== entry.created_at ? `<span>Last updated ${lastUpdatedLabel}</span>` : ''}
+<span>Published <time datetime="${createdIso}">${date}</time></span>
+${entry.completed_at && entry.completed_at !== entry.created_at ? `<span>Last updated <time datetime="${lastUpdatedIso}">${lastUpdatedLabel}</time></span>` : ''}
 <span>${entry.view_count} views</span>
 <span>${products.length} products compared</span>
 </div>
