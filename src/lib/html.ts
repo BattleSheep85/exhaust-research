@@ -66,7 +66,8 @@ export function layout(title: string, description: string, body: string, extra_h
 <meta property="og:image" content="${escapeHtml(ogImage)}">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
-<meta property="og:image:alt" content="Chrisputer Labs — AI-powered product research">
+<meta property="og:image:alt" content="${escapedTitle} — Chrisputer Labs">
+<meta property="og:image:type" content="image/svg+xml">
 <meta name="twitter:card" content="${twitterCard}">
 <meta name="twitter:title" content="${escapedTitle} | Chrisputer Labs">
 <meta name="twitter:description" content="${escapedDesc}">
