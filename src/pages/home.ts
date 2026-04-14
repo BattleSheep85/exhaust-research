@@ -40,6 +40,7 @@ function searchBar(size: 'large' | 'compact' = 'large', turnstileSiteKey?: strin
 
   const autocompleteScript = `<script>
 (function(){
+if(window.__acInit)return;window.__acInit=true;
 var inputs=document.querySelectorAll('input[name="q"]');
 inputs.forEach(function(input){
 var box=input.closest('.search-box');
