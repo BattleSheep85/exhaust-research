@@ -138,19 +138,22 @@ async function handleRequest(request: Request, env: Env, ctx: ExecutionContext):
         return generateAtomFeed(url.origin, env, request.headers.get('If-Modified-Since'));
       }
 
-      // API routes
+      // API routes. Treat HEAD as GET for read-only endpoints so monitors and
+      // link checkers get the right status — body is stripped by the outer
+      // wrapper for HEAD requests.
+      const isGetLike = request.method === 'GET' || request.method === 'HEAD';
       if (path === '/api/research' && request.method === 'POST') {
         return handleResearchPost(request, env, ctx);
       }
 
       // Events endpoint for activity feed polling
       const eventsMatch = path.match(/^\/api\/research\/([a-z0-9-]+)\/events$/);
-      if (eventsMatch && request.method === 'GET') {
+      if (eventsMatch && isGetLike) {
         return handleResearchEvents(eventsMatch[1], url, env);
       }
 
       // FTS5 autocomplete suggestions
-      if (path === '/api/search/suggest' && request.method === 'GET') {
+      if (path === '/api/search/suggest' && isGetLike) {
         return handleSearchSuggest(url, env);
       }
 

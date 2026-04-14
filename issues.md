@@ -1,6 +1,8 @@
 # Issues
 
-Last updated: 2026-04-14 (keep-improving R77)
+Last updated: 2026-04-14 (keep-improving R78)
+
+- [x] MED: Autocomplete suggest endpoint (`/api/search/suggest`) was sent with `Cache-Control: no-store` (`src/pages/api.ts`), so every keystroke (debounced ~5-7 hits per typed phrase) executed an FTS5 query against D1 with zero edge or browser caching. Now serves with `public, max-age=300, s-maxage=300, stale-while-revalidate=600` so popular prefixes ("best", "wifi", "mesh") get absorbed by CF's edge. Also fixed an R76 regression: HEAD requests to read-only API endpoints (events, suggest) returned 405 instead of being treated as GET — now `isGetLike` accepts both. Resolved R78.
 
 - [x] HIGH: Baseline security headers (HSTS, X-Content-Type-Options nosniff, X-Frame-Options, Referrer-Policy) were only on HTML responses (`src/worker.ts`). API/JSON, sitemap.xml, feed.xml, favicons, and redirects all shipped without them — leaving JSON endpoints exposed to MIME sniffing and missing transport-security on every non-HTML hit. Added `applyBaselineSecurityHeaders()` wrapper at the outer fetch handler so every response gets the four baseline headers; HTML pages still layer on their stricter CSP/Permissions-Policy in `htmlResponse()`. Verified live across HTML, JSON, redirects, static assets, sitemap. Resolved R77.
 

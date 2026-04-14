@@ -280,11 +280,11 @@ export async function handleResearchEvents(slug: string, url: URL, env: Env): Pr
 
 export async function handleSearchSuggest(url: URL, env: Env): Promise<Response> {
   const q = url.searchParams.get('q')?.trim() ?? '';
-  if (q.length < 2) return json([]);
+  if (q.length < 2) return suggestJson([]);
 
   // Sanitize FTS5 query: strip special chars, add prefix match
   const sanitized = q.replace(/[^\w\s-]/g, '').trim();
-  if (!sanitized) return json([]);
+  if (!sanitized) return suggestJson([]);
   const ftsQuery = sanitized.split(/\s+/).map((w) => `"${w}"*`).join(' ');
 
   try {
@@ -301,7 +301,7 @@ export async function handleSearchSuggest(url: URL, env: Env): Promise<Response>
     ).bind(ftsQuery).all<{ slug: string; query: string; category: string | null; view_count: number }>();
 
     const pretty = (rows.results ?? []).map((r) => ({ ...r, query: displayQuery(r.query) }));
-    return json(pretty);
+    return suggestJson(pretty);
   } catch {
     // FTS query syntax error — fall back to LIKE
     const rows = await env.DB.prepare(
@@ -315,8 +315,22 @@ export async function handleSearchSuggest(url: URL, env: Env): Promise<Response>
     ).bind(`%${sanitized}%`).all<{ slug: string; query: string; category: string | null; view_count: number }>();
 
     const pretty = (rows.results ?? []).map((r) => ({ ...r, query: displayQuery(r.query) }));
-    return json(pretty);
+    return suggestJson(pretty);
   }
+}
+
+// Suggestions are public, idempotent, and tolerable of small staleness.
+// Cache for 5min at the edge + browser so popular prefixes ("best", "wifi")
+// don't hit D1 FTS5 on every keystroke. New research entries take up to
+// 5 min to surface in autocomplete — same window as the home page cache.
+function suggestJson(data: unknown): Response {
+  return new Response(JSON.stringify(data), {
+    headers: {
+      'Content-Type': 'application/json',
+      'Cache-Control': 'public, max-age=300, s-maxage=300, stale-while-revalidate=600',
+      Vary: 'Accept-Encoding',
+    },
+  });
 }
 
 // ─── POST /api/subscribe ────────────────────────────────────────────────────
