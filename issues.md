@@ -86,6 +86,7 @@ Plus 1500ms post-complete delay + full page reload at the end.
 
 ## Generator Findings (2026-04-14)
 
+- [x] HIGH: Stored XSS in autocomplete dropdown — client-side script concatenated `i.query` / `i.category` (both user-submitted, stored in D1) into `dd.innerHTML` with no escaping. A query like `<img src=x onerror=...>` would execute on any visitor who typed a matching prefix. Added inline `esc()` helper and wrapped slug in `encodeURIComponent`. `src/pages/home.ts:61`
 - [x] MEDIUM: Zero security headers on HTML responses — added HSTS, X-Content-Type-Options: nosniff, Referrer-Policy: strict-origin-when-cross-origin, X-Frame-Options: DENY, Permissions-Policy gating geolocation/microphone/camera/payment. Emitted from `htmlResponse` so every HTML route gets them. Verified live.
 - [x] HIGH: `canonical_query` column added in migration 0003 but never backfilled — all 88 existing rows had NULL, so "Related research" block never rendered on any live page. Backfilled via Python script replicating `canonicalizeQuery` logic, applied via `wrangler d1 execute --file=backfill.sql` to remote D1. All 88 rows now populated; related research block rendering live.
 - [x] MEDIUM: Browse page had no structured data. Added BreadcrumbList + CollectionPage/ItemList JSON-LD so Google understands the archive listing.

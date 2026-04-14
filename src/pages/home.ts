@@ -58,8 +58,9 @@ fetch('/api/search/suggest?q='+encodeURIComponent(q))
 .then(function(r){return r.json()})
 .then(function(items){
 if(!items.length){dd.style.display='none';return}
+function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;')}
 dd.innerHTML=items.map(function(i){
-return '<a class="ac-item" href="/research/'+i.slug+'"><span>'+i.query+'</span>'+(i.category?'<span class="ac-cat">'+i.category+'</span>':'')+'</a>'
+return '<a class="ac-item" href="/research/'+encodeURIComponent(i.slug)+'"><span>'+esc(i.query)+'</span>'+(i.category?'<span class="ac-cat">'+esc(i.category)+'</span>':'')+'</a>'
 }).join('');
 dd.style.display='block'
 }).catch(function(){dd.style.display='none'})
