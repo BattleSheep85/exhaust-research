@@ -450,8 +450,23 @@ ${searchBar('compact', env.TURNSTILE_SITE_KEY)}
       logo: { '@type': 'ImageObject', url: 'https://chrisputer.tech/og-image.svg' },
     },
     mainEntityOfPage: { '@type': 'WebPage', '@id': pageUrl },
-    ...(jsonLdProducts.length > 0 ? { about: jsonLdProducts } : {}),
   });
+
+  // Separate top-level ItemList is what Google Rich Results actually parses
+  // for "list of products" display. Nesting Products inside Article.about is
+  // valid schema.org but rarely triggers list rich snippets.
+  const itemListLd = jsonLdProducts.length > 0 ? JSON.stringify({
+    '@context': 'https://schema.org',
+    '@type': 'ItemList',
+    name: displayTitle,
+    itemListOrder: 'https://schema.org/ItemListOrderDescending',
+    numberOfItems: jsonLdProducts.length,
+    itemListElement: jsonLdProducts.map((p, i) => ({
+      '@type': 'ListItem',
+      position: i + 1,
+      item: p,
+    })),
+  }) : '';
 
   const breadcrumbLd = JSON.stringify({
     '@context': 'https://schema.org',
@@ -464,7 +479,9 @@ ${searchBar('compact', env.TURNSTILE_SITE_KEY)}
   });
 
   const structuredData = entry.status === 'complete'
-    ? `<script type="application/ld+json">${jsonLd}</script><script type="application/ld+json">${breadcrumbLd}</script>`
+    ? `<script type="application/ld+json">${jsonLd}</script>` +
+      (itemListLd ? `<script type="application/ld+json">${itemListLd}</script>` : '') +
+      `<script type="application/ld+json">${breadcrumbLd}</script>`
     : '';
 
   const layoutMeta: LayoutMeta = {
