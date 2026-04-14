@@ -161,9 +161,12 @@ async function handleRequest(request: Request, env: Env, ctx: ExecutionContext):
       return htmlResponse(
         layout('Not Found', 'Page not found.', `<div class="container empty">
 <h2>404 — Not Found</h2>
-<p>The page you're looking for doesn't exist.</p>
-<a href="/" class="btn" style="margin-top:1rem">Go home</a>
-</div>`),
+<p>The page you're looking for doesn't exist. Try browsing research or starting a new one.</p>
+<div style="display:flex;gap:.5rem;margin-top:1.25rem;flex-wrap:wrap;justify-content:center">
+<a href="/" class="btn">Go home</a>
+<a href="/research" class="btn btn-ghost">Browse research</a>
+</div>
+</div>`, '<meta name="robots" content="noindex, follow">'),
         404, at, adPub,
       );
     } catch (error) {
