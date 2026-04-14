@@ -440,7 +440,7 @@ document.addEventListener('DOMContentLoaded',function(){
           d.events.forEach(function(e){
             var div=document.createElement('div');
             div.className='activity-item activity-'+e.event_type;
-            div.innerHTML=(icons[e.event_type]||'\u{25CF}')+' '+e.message;
+            div.textContent=(icons[e.event_type]||'\u{25CF}')+' '+e.message;
             feed.appendChild(div);
             feed.scrollTop=feed.scrollHeight;
             lastSeq=e.seq;
