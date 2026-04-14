@@ -304,6 +304,7 @@ async function generateSitemap(origin: string, env: Env): Promise<Response> {
      FROM research r
      WHERE r.status = 'complete'
        AND EXISTS (SELECT 1 FROM products p WHERE p.research_id = r.id)
+       AND LENGTH(r.query) >= 10 AND r.query LIKE '% %'
      ORDER BY r.created_at DESC
      LIMIT 5000`
   ).all<{ slug: string; created_at: number; lastmod: number }>();
@@ -341,6 +342,7 @@ async function generateAtomFeed(origin: string, env: Env): Promise<Response> {
      FROM research r
      WHERE r.status = 'complete'
        AND EXISTS (SELECT 1 FROM products p WHERE p.research_id = r.id)
+       AND LENGTH(r.query) >= 10 AND r.query LIKE '% %'
      ORDER BY COALESCE(r.completed_at, r.created_at) DESC
      LIMIT 50`
   ).all<{ slug: string; query: string; summary: string | null; created_at: number; updated: number }>();

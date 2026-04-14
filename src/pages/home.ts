@@ -108,6 +108,7 @@ export async function renderHome(env: Env): Promise<string> {
     `SELECT r.*, (SELECT COUNT(*) FROM products WHERE products.research_id = r.id) AS product_count
      FROM research r WHERE r.status = 'complete'
        AND EXISTS (SELECT 1 FROM products p WHERE p.research_id = r.id)
+       AND LENGTH(r.query) >= 10 AND r.query LIKE '% %'
      ORDER BY r.created_at DESC LIMIT 6`
   ).all<ResearchRow & { product_count: number }>();
 
@@ -115,6 +116,7 @@ export async function renderHome(env: Env): Promise<string> {
     `SELECT r.*, (SELECT COUNT(*) FROM products WHERE products.research_id = r.id) AS product_count
      FROM research r WHERE r.status = 'complete'
        AND EXISTS (SELECT 1 FROM products p WHERE p.research_id = r.id)
+       AND LENGTH(r.query) >= 10 AND r.query LIKE '% %'
      ORDER BY r.view_count DESC LIMIT 6`
   ).all<ResearchRow & { product_count: number }>();
 
