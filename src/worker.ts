@@ -55,6 +55,20 @@ async function handleRequest(request: Request, env: Env, ctx: ExecutionContext):
         return new Response(FAVICON_SVG, { headers: { 'Content-Type': 'image/svg+xml', 'Cache-Control': 'public, max-age=86400' } });
       }
 
+      // Browsers and unfurlers request these convention paths regardless of
+      // the <link rel="icon"> tag. Without these, every request 404s with a
+      // ~20KB error page (huge waste, dirties analytics). All modern targets
+      // support SVG favicons, so 301 to the canonical SVG.
+      if (path === '/favicon.ico' || path === '/apple-touch-icon.png' || path === '/apple-touch-icon-precomposed.png') {
+        return new Response(null, {
+          status: 301,
+          headers: {
+            Location: '/favicon.svg',
+            'Cache-Control': 'public, max-age=2592000, immutable',
+          },
+        });
+      }
+
       if (path === '/og-image.svg') {
         return new Response(OG_IMAGE_SVG, { headers: { 'Content-Type': 'image/svg+xml', 'Cache-Control': 'public, max-age=86400' } });
       }

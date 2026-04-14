@@ -1,6 +1,8 @@
 # Issues
 
-Last updated: 2026-04-14 (keep-improving R74)
+Last updated: 2026-04-14 (keep-improving R75)
+
+- [x] MED: `/favicon.ico`, `/apple-touch-icon.png`, and `/apple-touch-icon-precomposed.png` returned 404s with the full ~20KB error page (`src/worker.ts`). Browsers, RSS readers, Slack/iMessage unfurlers, and link checkers request these convention paths regardless of `<link rel="icon">`. Now 301-redirect to `/favicon.svg` with 30-day immutable cache, so each requester pays the redirect once. Eliminates noisy 404s in CF analytics and saves ~20KB per drive-by request. Resolved R75.
 
 - [x] LOW: Research pages set `og:type=article` but emitted no `article:*` Open Graph properties (`src/lib/html.ts`, `src/pages/research-result.ts`). The article OG namespace defines `published_time`, `modified_time`, `author`, `section`, and `tag` — recommended for any article-typed share. Also added `twitter:image:alt` for screen readers on Twitter card previews. Now wired through `LayoutMeta.article` and verified live. Resolved R74.
 
