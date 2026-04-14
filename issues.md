@@ -1,6 +1,8 @@
 # Issues
 
-Last updated: 2026-04-14 (keep-improving R66)
+Last updated: 2026-04-14 (keep-improving R67)
+
+- [x] LOW: Article JSON-LD lacked `inLanguage`, `articleSection`, and `keywords` — optional-but-useful fields that improve Google's topical understanding (`src/pages/research-result.ts`). Derives section from category and keywords from query tokens (stripped stopwords). Resolved R67.
 
 - [x] MED: Article JSON-LD missing `image` property (`src/pages/research-result.ts`). Google's Article rich result guidelines require `image` — without it, pages are ineligible for article rich snippets. Now emits `image: [og.svg URL]`. Resolved R66.
 

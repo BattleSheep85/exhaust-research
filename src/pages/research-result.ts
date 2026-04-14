@@ -451,14 +451,18 @@ ${searchBar('compact', env.TURNSTILE_SITE_KEY)}
 
   const isoModified = new Date(lastModifiedTs * 1000).toISOString();
   const articleImage = `https://chrisputer.tech/research/${slug}/og.svg`;
+  const keywordTerms = entry.query.split(/\s+/).filter((w) => w.length > 2 && !/^(the|and|for|with|from|best|top|good|great)$/i.test(w)).slice(0, 8);
   const jsonLd = JSON.stringify({
     '@context': 'https://schema.org',
     '@type': 'Article',
     headline: displayTitle,
     description: entry.summary ?? '',
     image: [articleImage],
+    inLanguage: 'en-US',
     datePublished: isoDate,
     dateModified: isoModified,
+    ...(entry.category ? { articleSection: entry.category } : {}),
+    ...(keywordTerms.length > 0 ? { keywords: keywordTerms.join(', ') } : {}),
     author: { '@type': 'Organization', name: 'Chrisputer Labs', url: 'https://chrisputer.tech' },
     publisher: {
       '@type': 'Organization',
