@@ -46,13 +46,22 @@ function buildAffiliateUrl(rawUrl: string, affiliateTag: string, walmartImpactId
   }
 }
 
+function joinBrandAndName(productName: string, brand: string | null): string {
+  const name = productName.trim();
+  if (!brand) return name;
+  const b = brand.trim();
+  if (!b) return name;
+  if (name.toLowerCase().startsWith(b.toLowerCase())) return name;
+  return `${b} ${name}`;
+}
+
 function amazonSearchUrl(productName: string, brand: string | null, affiliateTag: string): string {
-  const q = [brand, productName].filter(Boolean).join(' ').trim();
+  const q = joinBrandAndName(productName, brand);
   return `https://www.amazon.com/s?k=${encodeURIComponent(q)}&tag=${encodeURIComponent(affiliateTag)}`;
 }
 
 function googleSearchUrl(productName: string, brand: string | null): string {
-  const q = [brand, productName].filter(Boolean).join(' ').trim();
+  const q = joinBrandAndName(productName, brand);
   return `https://www.google.com/search?q=${encodeURIComponent(q)}`;
 }
 
