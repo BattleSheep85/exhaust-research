@@ -529,16 +529,20 @@ async function generateAtomFeed(origin: string, env: Env, ifModifiedSince: strin
     const updated = new Date(r.updated * 1000).toISOString();
     const link = `${origin}/research/${r.slug}`;
     const summary = r.summary ? escapeXml(r.summary.slice(0, 500)) : '';
+    // Per RFC 4287 §4.2.1, atom:author is recommended on each entry; readers
+    // (Inoreader, Feedly) attribute "Unknown author" without it.
     return `<entry>
 <id>${link}</id>
 <title>${escapeXml(displayQuery(r.query))}</title>
 <link href="${link}"/>
 <published>${published}</published>
 <updated>${updated}</updated>
+<author><name>Chrisputer Labs</name><uri>${origin}/</uri></author>
 <summary>${summary}</summary>
 </entry>`;
   }).join('\n');
 
+  const currentYear = new Date(latestUpdated * 1000).getUTCFullYear();
   const xml = `<?xml version="1.0" encoding="UTF-8"?>
 <feed xmlns="http://www.w3.org/2005/Atom">
 <title>Chrisputer Labs — Research Feed</title>
@@ -546,8 +550,12 @@ async function generateAtomFeed(origin: string, env: Env, ifModifiedSince: strin
 <link href="${origin}/"/>
 <id>${origin}/</id>
 <updated>${feedUpdated}</updated>
-<author><name>Chrisputer Labs</name></author>
+<author><name>Chrisputer Labs</name><uri>${origin}/</uri></author>
 <subtitle>Latest AI-powered product research</subtitle>
+<icon>${origin}/favicon.svg</icon>
+<logo>${origin}/og-image.svg</logo>
+<rights>© ${currentYear} Chrisputer Labs. All rights reserved.</rights>
+<generator uri="${origin}/">Chrisputer Labs</generator>
 ${entries}
 </feed>`;
 

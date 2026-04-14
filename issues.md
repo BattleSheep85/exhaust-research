@@ -1,6 +1,10 @@
 # Issues
 
-Last updated: 2026-04-14 (keep-improving R78)
+Last updated: 2026-04-14 (keep-improving R79)
+
+- [ ] LOW: A test research entry (`test-gizmo-xyzqq-07a60134`) was inadvertently created during R76 probing of `/research/new`. It passes the LENGTH/space/has-products quality filter so it's leaking into the sitemap, Atom feed, and home page. Single-row data cleanup task — not appropriate to do via autonomous loop without explicit approval (Scope Guards: DB schema/data changes). Leaving for Chris to delete via `wrangler d1 execute exhaust-research-db --remote --command "DELETE FROM research WHERE slug='test-gizmo-xyzqq-07a60134'"`.
+
+- [x] LOW: Atom feed (`/feed.xml`) was missing several RFC 4287 recommended elements (`src/worker.ts`): per-entry `<author>` (readers like Inoreader/Feedly attribute "Unknown author" without it), feed-level `<icon>`/`<logo>`, `<rights>`, and `<generator>`. Added all five. Verified live. Resolved R79.
 
 - [x] MED: Autocomplete suggest endpoint (`/api/search/suggest`) was sent with `Cache-Control: no-store` (`src/pages/api.ts`), so every keystroke (debounced ~5-7 hits per typed phrase) executed an FTS5 query against D1 with zero edge or browser caching. Now serves with `public, max-age=300, s-maxage=300, stale-while-revalidate=600` so popular prefixes ("best", "wifi", "mesh") get absorbed by CF's edge. Also fixed an R76 regression: HEAD requests to read-only API endpoints (events, suggest) returned 405 instead of being treated as GET — now `isGetLike` accepts both. Resolved R78.
 
