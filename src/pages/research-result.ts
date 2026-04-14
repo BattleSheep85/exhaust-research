@@ -1,6 +1,6 @@
 import { type Env, type ResearchRow, type ProductRow, type BuyersGuide, DEFAULT_AFFILIATE_TAG } from '../types';
 import { layout, html, type LayoutMeta } from '../lib/html';
-import { parseJsonSafe, isValidHttpUrl, escapeHtml } from '../lib/utils';
+import { parseJsonSafe, isValidHttpUrl, escapeHtml, timeAgo } from '../lib/utils';
 import { searchBar } from './home';
 
 // Allowlist of retailer hostnames we recognize as "buy" destinations.
@@ -99,6 +99,7 @@ interface RelatedResearchRow {
   category: string | null;
   canonical_query: string | null;
   view_count: number;
+  created_at: number;
 }
 
 // Find up to 5 sibling research pages that share canonical tokens. Used to build
@@ -114,7 +115,7 @@ async function getRelatedResearch(
   if (tokens.length === 0) return [];
 
   const likeClauses = tokens.map((_, i) => `canonical_query LIKE ?${i + 2}`).join(' OR ');
-  const sql = `SELECT slug, query, category, canonical_query, view_count
+  const sql = `SELECT slug, query, category, canonical_query, view_count, created_at
                FROM research
                WHERE status = 'complete'
                  AND slug != ?1
@@ -365,7 +366,7 @@ ${sourceList.length > 0 ? `<h3>Sources (${sourceList.length})</h3>${sourceList.m
 ${related.length > 0 ? `<section class="related-research" style="margin-top:3rem;padding-top:2rem;border-top:1px solid var(--surface2)">
 <h2 style="font-size:1.1rem;font-weight:600;margin-bottom:1rem">Related research</h2>
 <div class="grid">${related.map((r) => `<a class="card" href="/research/${escapeHtml(r.slug)}">
-${r.category ? `<div class="card-top"><span class="card-badge">${escapeHtml(r.category)}</span><span class="card-time">${r.view_count} views</span></div>` : `<div class="card-top"><span class="card-time">${r.view_count} views</span></div>`}
+${r.category ? `<div class="card-top"><span class="card-badge">${escapeHtml(r.category)}</span><span class="card-time">${timeAgo(r.created_at * 1000)}</span></div>` : `<div class="card-top"><span class="card-time">${timeAgo(r.created_at * 1000)}</span></div>`}
 <h3>${escapeHtml(r.query)}</h3>
 </a>`).join('')}</div>
 </section>` : ''}
