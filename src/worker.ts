@@ -13,9 +13,34 @@ import { getTierConfig, isValidTier } from './lib/research-config';
 // (home: 5m, research result: 1h) so bumping is a soft cutover, not a purge.
 const CACHE_VERSION = 'v30';
 
+// Baseline security headers applied to every response (HTML, JSON, redirects,
+// static assets). HTML pages add a stricter CSP on top in htmlResponse(); these
+// are the universal defaults that should never be missing — previously API
+// responses had none of these, leaving JSON endpoints without HSTS/nosniff/
+// frame protection.
+const BASELINE_SECURITY_HEADERS: Record<string, string> = {
+  'Strict-Transport-Security': 'max-age=31536000; includeSubDomains',
+  'X-Content-Type-Options': 'nosniff',
+  'X-Frame-Options': 'DENY',
+  'Referrer-Policy': 'strict-origin-when-cross-origin',
+};
+
+function applyBaselineSecurityHeaders(response: Response): Response {
+  let needsCopy = false;
+  for (const k of Object.keys(BASELINE_SECURITY_HEADERS)) {
+    if (!response.headers.has(k)) { needsCopy = true; break; }
+  }
+  if (!needsCopy) return response;
+  const headers = new Headers(response.headers);
+  for (const [k, v] of Object.entries(BASELINE_SECURITY_HEADERS)) {
+    if (!headers.has(k)) headers.set(k, v);
+  }
+  return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
+}
+
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
-    const response = await handleRequest(request, env, ctx);
+    const response = applyBaselineSecurityHeaders(await handleRequest(request, env, ctx));
     // HEAD: same headers/status as GET, body stripped. Done here (not per-route)
     // so link checkers, uptime monitors, and Googlebot prefetch all just work.
     if (request.method === 'HEAD') {

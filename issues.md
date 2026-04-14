@@ -1,6 +1,8 @@
 # Issues
 
-Last updated: 2026-04-14 (keep-improving R76)
+Last updated: 2026-04-14 (keep-improving R77)
+
+- [x] HIGH: Baseline security headers (HSTS, X-Content-Type-Options nosniff, X-Frame-Options, Referrer-Policy) were only on HTML responses (`src/worker.ts`). API/JSON, sitemap.xml, feed.xml, favicons, and redirects all shipped without them — leaving JSON endpoints exposed to MIME sniffing and missing transport-security on every non-HTML hit. Added `applyBaselineSecurityHeaders()` wrapper at the outer fetch handler so every response gets the four baseline headers; HTML pages still layer on their stricter CSP/Permissions-Policy in `htmlResponse()`. Verified live across HTML, JSON, redirects, static assets, sitemap. Resolved R77.
 
 - [x] MED: API paths (`/api/research`, `/api/subscribe`, etc.) returned the 20KB HTML 404 page when hit with the wrong method or a typo'd subpath (`src/worker.ts`). API consumers (curl, fetch, monitors, link checkers) want JSON. Now returns `405 + Allow:` for known routes with wrong method, `404 + JSON body` for unknown `/api/*` paths. Eliminates ~20KB-per-request waste and gives clients a parseable error. Resolved R76.
 
