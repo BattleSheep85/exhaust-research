@@ -386,6 +386,8 @@ ${searchBar('compact', env.TURNSTILE_SITE_KEY)}
       name: p.name,
     };
     if (p.brand) item.brand = { '@type': 'Brand', name: p.brand };
+    const descSource = p.verdict || p.bestFor || (p.pros.length > 0 ? p.pros.slice(0, 3).join('. ') : '');
+    if (descSource) item.description = descSource;
     if (p.price != null) {
       const offer: Record<string, unknown> = {
         '@type': 'Offer',
@@ -399,7 +401,15 @@ ${searchBar('compact', env.TURNSTILE_SITE_KEY)}
       item.offers = offer;
     }
     if (p.rating != null) item.aggregateRating = { '@type': 'AggregateRating', ratingValue: p.rating, bestRating: 5, worstRating: 0, reviewCount: 1 };
-    if (p.verdict) item.review = { '@type': 'Review', reviewBody: p.verdict, author: { '@type': 'Organization', name: 'Chrisputer Labs' } };
+    if (p.verdict) {
+      const review: Record<string, unknown> = {
+        '@type': 'Review',
+        reviewBody: p.verdict,
+        author: { '@type': 'Organization', name: 'Chrisputer Labs' },
+      };
+      if (p.rating != null) review.reviewRating = { '@type': 'Rating', ratingValue: p.rating, bestRating: 5, worstRating: 0 };
+      item.review = review;
+    }
     return item;
   });
 
