@@ -68,6 +68,10 @@ async function handleRequest(request: Request, env: Env, ctx: ExecutionContext):
         return generateSitemap(url.origin, env);
       }
 
+      if (path === '/feed.xml') {
+        return generateAtomFeed(url.origin, env);
+      }
+
       // API routes
       if (path === '/api/research' && request.method === 'POST') {
         return handleResearchPost(request, env, ctx);
@@ -319,6 +323,61 @@ ${entries}
 
   return new Response(xml, {
     headers: { 'Content-Type': 'application/xml', 'Cache-Control': 'public, max-age=3600' },
+  });
+}
+
+function escapeXml(s: string): string {
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+}
+
+async function generateAtomFeed(origin: string, env: Env): Promise<Response> {
+  const rows = await env.DB.prepare(
+    `SELECT r.slug, r.query, r.summary, r.created_at, COALESCE(r.completed_at, r.created_at) AS updated
+     FROM research r
+     WHERE r.status = 'complete'
+       AND EXISTS (SELECT 1 FROM products p WHERE p.research_id = r.id)
+     ORDER BY COALESCE(r.completed_at, r.created_at) DESC
+     LIMIT 50`
+  ).all<{ slug: string; query: string; summary: string | null; created_at: number; updated: number }>();
+
+  const results = rows.results ?? [];
+  const latestUpdated = results[0]?.updated ?? Math.floor(Date.now() / 1000);
+  const feedUpdated = new Date(latestUpdated * 1000).toISOString();
+
+  const entries = results.map((r) => {
+    const published = new Date(r.created_at * 1000).toISOString();
+    const updated = new Date(r.updated * 1000).toISOString();
+    const link = `${origin}/research/${r.slug}`;
+    const summary = r.summary ? escapeXml(r.summary.slice(0, 500)) : '';
+    return `<entry>
+<id>${link}</id>
+<title>${escapeXml(r.query)}</title>
+<link href="${link}"/>
+<published>${published}</published>
+<updated>${updated}</updated>
+<summary>${summary}</summary>
+</entry>`;
+  }).join('\n');
+
+  const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+<title>Chrisputer Labs — Research Feed</title>
+<link href="${origin}/feed.xml" rel="self"/>
+<link href="${origin}/"/>
+<id>${origin}/</id>
+<updated>${feedUpdated}</updated>
+<author><name>Chrisputer Labs</name></author>
+<subtitle>Latest AI-powered product research</subtitle>
+${entries}
+</feed>`;
+
+  return new Response(xml, {
+    headers: { 'Content-Type': 'application/atom+xml;charset=utf-8', 'Cache-Control': 'public, max-age=3600' },
   });
 }
 
