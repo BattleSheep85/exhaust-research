@@ -93,6 +93,14 @@ function sourceRel(url: string): string {
   }
 }
 
+function sourceLabel(url: string): string {
+  try {
+    return new URL(url).hostname.replace(/^www\./, '');
+  } catch {
+    return url;
+  }
+}
+
 interface RelatedResearchRow {
   slug: string;
   query: string;
@@ -360,7 +368,7 @@ ${products.length > 0 ? `<h2 style="font-size:1.25rem;font-weight:700;margin-bot
 
 ${(resultData.methodology || sourceList.length > 0) ? `<div class="sources" style="margin-top:2rem">
 ${resultData.methodology ? `<h3>Methodology</h3><p style="font-size:.85rem;color:var(--text2);margin-bottom:1rem">${escapeHtml(resultData.methodology)}</p>` : ''}
-${sourceList.length > 0 ? `<h3>Sources (${sourceList.length})</h3>${sourceList.map((u) => `<a href="${escapeHtml(u)}" target="_blank" rel="${sourceRel(u)}">${escapeHtml(u)}</a>`).join('')}` : ''}
+${sourceList.length > 0 ? `<h3>Sources (${sourceList.length})</h3>${sourceList.map((u) => `<a href="${escapeHtml(u)}" target="_blank" rel="${sourceRel(u)}">${escapeHtml(sourceLabel(u))}</a>`).join('')}` : ''}
 </div>` : ''}
 
 ${related.length > 0 ? `<section class="related-research" style="margin-top:3rem;padding-top:2rem;border-top:1px solid var(--surface2)">
