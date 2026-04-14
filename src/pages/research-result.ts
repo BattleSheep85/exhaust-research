@@ -450,11 +450,13 @@ ${searchBar('compact', env.TURNSTILE_SITE_KEY)}
   });
 
   const isoModified = new Date(lastModifiedTs * 1000).toISOString();
+  const articleImage = `https://chrisputer.tech/research/${slug}/og.svg`;
   const jsonLd = JSON.stringify({
     '@context': 'https://schema.org',
     '@type': 'Article',
     headline: displayTitle,
     description: entry.summary ?? '',
+    image: [articleImage],
     datePublished: isoDate,
     dateModified: isoModified,
     author: { '@type': 'Organization', name: 'Chrisputer Labs', url: 'https://chrisputer.tech' },

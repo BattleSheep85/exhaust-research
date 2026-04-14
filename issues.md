@@ -1,6 +1,8 @@
 # Issues
 
-Last updated: 2026-04-14 (keep-improving R65)
+Last updated: 2026-04-14 (keep-improving R66)
+
+- [x] MED: Article JSON-LD missing `image` property (`src/pages/research-result.ts`). Google's Article rich result guidelines require `image` — without it, pages are ineligible for article rich snippets. Now emits `image: [og.svg URL]`. Resolved R66.
 
 - [x] LOW: Non-submit `<button>` elements missing explicit `type="button"` (nav-toggle in `src/lib/html.ts`, copy-link + notify-btn in `src/pages/research-result.ts`). If any were ever placed inside a form they'd default to submit and trigger unwanted submissions. Resolved R65.
 
