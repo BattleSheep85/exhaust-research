@@ -74,6 +74,7 @@ export function layout(title: string, description: string, body: string, extra_h
 <meta name="twitter:image" content="${escapeHtml(ogImage)}">
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <link rel="apple-touch-icon" href="/favicon.svg">
+<link rel="manifest" href="/manifest.webmanifest">
 <meta name="theme-color" content="#2563eb">
 <link rel="alternate" type="application/atom+xml" title="Chrisputer Labs — Research Feed" href="/feed.xml">
 <link rel="preconnect" href="https://fonts.googleapis.com">

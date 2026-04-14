@@ -11,7 +11,7 @@ import { getTierConfig, isValidTier } from './lib/research-config';
 // Bump when the page template/schema shape changes in a way that should
 // invalidate every cached HTML blob. Old keys age out on their own TTL
 // (home: 5m, research result: 1h) so bumping is a soft cutover, not a purge.
-const CACHE_VERSION = 'v13';
+const CACHE_VERSION = 'v14';
 
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
@@ -51,6 +51,22 @@ async function handleRequest(request: Request, env: Env, ctx: ExecutionContext):
 
       if (path === '/og-image.svg') {
         return new Response(OG_IMAGE_SVG, { headers: { 'Content-Type': 'image/svg+xml', 'Cache-Control': 'public, max-age=86400' } });
+      }
+
+      if (path === '/manifest.webmanifest') {
+        const manifest = {
+          name: 'Chrisputer Labs',
+          short_name: 'Chrisputer',
+          description: 'AI-powered product research backed by 20 years of IT expertise.',
+          start_url: '/',
+          display: 'standalone',
+          background_color: '#020617',
+          theme_color: '#2563eb',
+          icons: [{ src: '/favicon.svg', sizes: 'any', type: 'image/svg+xml' }],
+        };
+        return new Response(JSON.stringify(manifest), {
+          headers: { 'Content-Type': 'application/manifest+json', 'Cache-Control': 'public, max-age=86400' },
+        });
       }
 
       if (path === '/robots.txt') {
