@@ -458,6 +458,9 @@ ${searchBar('compact', env.TURNSTILE_SITE_KEY)}
   const jsonLd = JSON.stringify({
     '@context': 'https://schema.org',
     '@type': 'Article',
+    '@id': `${pageUrl}#article`,
+    url: pageUrl,
+    isPartOf: { '@id': 'https://chrisputer.tech/#website' },
     headline: displayTitle,
     description: entry.summary ?? '',
     image: [articleImage],
@@ -466,8 +469,14 @@ ${searchBar('compact', env.TURNSTILE_SITE_KEY)}
     dateModified: isoModified,
     ...(entry.category ? { articleSection: entry.category } : {}),
     ...(keywordTerms.length > 0 ? { keywords: keywordTerms.join(', ') } : {}),
-    author: { '@type': 'Organization', name: 'Chrisputer Labs', url: 'https://chrisputer.tech' },
+    author: {
+      '@id': 'https://chrisputer.tech/#organization',
+      '@type': 'Organization',
+      name: 'Chrisputer Labs',
+      url: 'https://chrisputer.tech',
+    },
     publisher: {
+      '@id': 'https://chrisputer.tech/#organization',
       '@type': 'Organization',
       name: 'Chrisputer Labs',
       url: 'https://chrisputer.tech',

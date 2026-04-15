@@ -1,6 +1,8 @@
 # Issues
 
-Last updated: 2026-04-14 (keep-improving R84)
+Last updated: 2026-04-14 (keep-improving R85)
+
+- [x] LOW: Research result Article JSON-LD was outside the site graph (`src/pages/research-result.ts`) — no `@id`, no `url`, no `isPartOf`, and `author`/`publisher` were declared inline Organizations without the `@id` link to `#organization`. Google and graph consumers couldn't unify the Article's publisher with the home-page Organization entity. Added Article `@id: pageUrl#article`, `url`, `isPartOf: #website`, and pointed `author`/`publisher` at the `#organization` `@id` while keeping the inline fields (Google's Article rich-result doc still recommends publisher carry `@type`/`name`/`logo`). Bumped CACHE_VERSION v33 → v34 to invalidate the per-slug KV blobs. Resolved R85.
 
 - [x] LOW: Browse page CollectionPage JSON-LD was disconnected from the graph (`src/pages/research-browse.ts`) — no `@id`, no `url`, no `isPartOf`/`publisher`, no `inLanguage`, ItemList had no `numberOfItems` or `itemListOrder`. Added all of them, wired `isPartOf: #website` / `publisher: #organization` so the browse page closes into R82's site graph, and made name/description query-aware (search result pages now say "Search: X | Chrisputer Labs" instead of generic "Browse Research"). `@id`/`url` reflect actual pagination/query params. Bumped CACHE_VERSION v32 → v33. Resolved R84.
 
