@@ -109,6 +109,19 @@ async function handleRequest(request: Request, env: Env, ctx: ExecutionContext):
         });
       }
 
+      // Legacy / alternate manifest paths. Some tools and older Android
+      // browsers look for /manifest.json or /site.webmanifest. 301 to the
+      // canonical webmanifest so they don't hit the 20KB 404 page.
+      if (path === '/manifest.json' || path === '/site.webmanifest') {
+        return new Response(null, {
+          status: 301,
+          headers: {
+            Location: '/manifest.webmanifest',
+            'Cache-Control': 'public, max-age=2592000, immutable',
+          },
+        });
+      }
+
       if (path === '/og-image.svg') {
         return new Response(OG_IMAGE_SVG, { headers: { 'Content-Type': 'image/svg+xml', 'Cache-Control': 'public, max-age=86400' } });
       }

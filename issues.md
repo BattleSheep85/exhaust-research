@@ -1,6 +1,8 @@
 # Issues
 
-Last updated: 2026-04-14 (keep-improving R92)
+Last updated: 2026-04-14 (keep-improving R93)
+
+- [x] LOW: `/manifest.json` and `/site.webmanifest` returned the 20KB HTML 404 page (`src/worker.ts`). The canonical web app manifest lives at `/manifest.webmanifest`, but older Android/Chrome tooling, link checkers, and some legacy browsers probe `/manifest.json` or `/site.webmanifest` first. Each hit burned ~20KB for no reason. Mirrored the favicon.ico/apple-touch-icon fix (R75): 301 redirect to `/manifest.webmanifest` with 30-day immutable cache. Verified both live. Resolved R93.
 
 - [x] MED: Test research rows (`test-gizmo-xyzqq-07a60134`, `test-r89-c8e43689`) appeared in the live sitemap.xml and Atom feed despite the R89 bot-UA block preventing new leaks — the existing listing filters (`LENGTH(r.query) >= 10 AND r.query LIKE '% %'`) matched these rows because the queries were "test gizmo xyzqq" / "verify r89 bot block" (both 10+ chars with spaces). Google would crawl and index these thin test pages via the sitemap. Added `AND r.query NOT LIKE 'test %' AND r.query NOT LIKE 'verify %'` to every public listing query: sitemap, Atom feed, browse default + search, home recent + popular. Rows remain in D1 (Chris still needs to delete them via wrangler d1 when ready — Scope Guards apply to data deletion) but are no longer exposed to crawlers or UI. Bumped CACHE_VERSION v36 → v37. Verified `test-gizmo` and `test-r89` are no longer in the live sitemap. Real queries starting with "test " or "verify " (extremely rare for product research) would also be filtered — acceptable tradeoff. Resolved R92.
 
