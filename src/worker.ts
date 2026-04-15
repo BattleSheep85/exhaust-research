@@ -326,9 +326,13 @@ ${searchBar('compact')}
         return htmlResponse(result.html, 200, at, adPub, result.lastModified);
       }
 
-      // About
+      // About — static content, lastmod is ABOUT_LASTMOD. Honor
+      // If-Modified-Since for 304s (Googlebot revisits, CF edge revalidation).
       if (path === '/about') {
-        return htmlResponse(renderAbout(), 200, at, adPub);
+        const aboutLastmodSec = Math.floor(Date.parse(`${ABOUT_LASTMOD}T00:00:00Z`) / 1000);
+        const notModified = maybe304(request.headers.get('If-Modified-Since'), aboutLastmodSec);
+        if (notModified) return notModified;
+        return htmlResponse(renderAbout(), 200, at, adPub, aboutLastmodSec);
       }
 
       // 404

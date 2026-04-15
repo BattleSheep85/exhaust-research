@@ -1,6 +1,8 @@
 # Issues
 
-Last updated: 2026-04-14 (keep-improving R95)
+Last updated: 2026-04-14 (keep-improving R96)
+
+- [x] LOW: `/about` sent no `Last-Modified` header and didn't honor `If-Modified-Since` (`src/worker.ts`). The `ABOUT_LASTMOD` constant (bumped manually when /about materially changes) was only wired into the sitemap — serving it on the page response itself lets Googlebot skip re-fetching unchanged copy and lets CF edge revalidate cheaply. Wired `ABOUT_LASTMOD` into both the 304 check (via existing `maybe304` helper) and the 200 response's `Last-Modified` header. Verified: `Last-Modified: Tue, 14 Apr 2026 00:00:00 GMT` on 200, `HTTP/2 304` when IMS > lastmod. Resolved R96.
 
 - [x] MED: Research result pages sent `Last-Modified` but never honored `If-Modified-Since` from clients — Googlebot/Bingbot/Inoreader do conditional GETs against research pages, and each one re-transferred the full ~60KB HTML body instead of 304-ing. Sitemap.xml and feed.xml already had 304 handling; research detail pages did not. Added a shared `maybe304()` helper and wired it into both the KV cache hit path (`page:${CACHE_VERSION}:${slug}:lm` stores the completed_at ts) and the fresh render path. Verified: cache-busted `?v=…` request with IfModSince > resource lastmod returns `HTTP/2 304` with Last-Modified preserved. Saves ~60KB egress per conditional revisit from bots + feed readers + repeat browser visits within 1h KV TTL. Resolved R95.
 
