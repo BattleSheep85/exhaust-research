@@ -542,7 +542,7 @@ ${summaryText ? `<text x="80" y="${category ? '310' : '270'}" font-family="syste
   return new Response(svg, {
     headers: {
       'Content-Type': 'image/svg+xml',
-      'Cache-Control': 'public, max-age=3600',
+      'Cache-Control': 'public, max-age=86400, s-maxage=86400, stale-while-revalidate=604800',
     },
   });
 }

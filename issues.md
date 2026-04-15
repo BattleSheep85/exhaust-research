@@ -1,6 +1,8 @@
 # Issues
 
-Last updated: 2026-04-15 (keep-improving R102)
+Last updated: 2026-04-15 (keep-improving R103)
+
+- [x] LOW: Per-research OG image (`/research/<slug>/og.svg`) had `Cache-Control: public, max-age=3600` (`src/worker.ts`) — 1h for content that's derived once from the research row and essentially never changes. Social-share scrapers (Twitter, Facebook, LinkedIn, Slack, Discord) hit the OG URL aggressively on first share and cache for days on their end anyway. Also every page render sends the URL as `<meta og:image>` — returning users and repeat scraping wasted origin compute redrawing the SVG every hour. Bumped to `public, max-age=86400, s-maxage=86400, stale-while-revalidate=604800` — 1 day fresh, 7 days SWR, so CF edge can serve the SVG near-indefinitely between origin hits. Resolved R103.
 
 - [x] LOW: Atom feed entries lacked `<category term="…"/>` (`src/worker.ts`). RSS/Atom readers (Feedly, Inoreader, NewsBlur) use `<category>` to let users filter or tag subscriptions by topic. Each research row already carries a `category` column populated by the synthesis LLM — the feed just wasn't selecting it. Added `category` to the SELECT, guarded with `r.category ? … : ''` so rows with null category don't emit an empty tag. Verified live: `<category term="mesh WiFi"/>` now present. Resolved R102.
 
