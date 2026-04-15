@@ -11,7 +11,7 @@ import { getTierConfig, isValidTier } from './lib/research-config';
 // Bump when the page template/schema shape changes in a way that should
 // invalidate every cached HTML blob. Old keys age out on their own TTL
 // (home: 5m, research result: 1h) so bumping is a soft cutover, not a purge.
-const CACHE_VERSION = 'v36';
+const CACHE_VERSION = 'v37';
 
 // Update when /about page content materially changes. Signals freshness to
 // crawlers so the page gets re-crawled after structured-data or copy edits.
@@ -500,6 +500,7 @@ async function generateSitemap(origin: string, env: Env, ifModifiedSince: string
        WHERE r.status = 'complete'
          AND EXISTS (SELECT 1 FROM products p WHERE p.research_id = r.id)
          AND LENGTH(r.query) >= 10 AND r.query LIKE '% %'
+         AND r.query NOT LIKE 'test %' AND r.query NOT LIKE 'verify %'
      )
      SELECT slug, created_at, lastmod FROM ranked WHERE rn = 1
      ORDER BY created_at DESC
@@ -557,6 +558,7 @@ async function generateAtomFeed(origin: string, env: Env, ifModifiedSince: strin
        WHERE r.status = 'complete'
          AND EXISTS (SELECT 1 FROM products p WHERE p.research_id = r.id)
          AND LENGTH(r.query) >= 10 AND r.query LIKE '% %'
+         AND r.query NOT LIKE 'test %' AND r.query NOT LIKE 'verify %'
      )
      SELECT slug, query, summary, created_at, updated FROM ranked WHERE rn = 1
      ORDER BY updated DESC

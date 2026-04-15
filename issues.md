@@ -1,6 +1,8 @@
 # Issues
 
-Last updated: 2026-04-14 (keep-improving R91)
+Last updated: 2026-04-14 (keep-improving R92)
+
+- [x] MED: Test research rows (`test-gizmo-xyzqq-07a60134`, `test-r89-c8e43689`) appeared in the live sitemap.xml and Atom feed despite the R89 bot-UA block preventing new leaks — the existing listing filters (`LENGTH(r.query) >= 10 AND r.query LIKE '% %'`) matched these rows because the queries were "test gizmo xyzqq" / "verify r89 bot block" (both 10+ chars with spaces). Google would crawl and index these thin test pages via the sitemap. Added `AND r.query NOT LIKE 'test %' AND r.query NOT LIKE 'verify %'` to every public listing query: sitemap, Atom feed, browse default + search, home recent + popular. Rows remain in D1 (Chris still needs to delete them via wrangler d1 when ready — Scope Guards apply to data deletion) but are no longer exposed to crawlers or UI. Bumped CACHE_VERSION v36 → v37. Verified `test-gizmo` and `test-r89` are no longer in the live sitemap. Real queries starting with "test " or "verify " (extremely rare for product research) would also be filtered — acceptable tradeoff. Resolved R92.
 
 - [x] LOW: Product cards use `<article class="product" id="product-N">` but the global scroll-margin-top CSS only targeted `h1[id],h2[id],h3[id],section[id]` (`src/lib/html.ts`). Deep-links to `#product-3` scrolled the card flush to the sticky-nav top instead of a pleasant 1rem offset, and users clicking a shared anchor had no visual cue where they landed. Added `h4[id]` and `article[id]` to the selector, plus an `article[id]:target` outline + 1.5s pulse box-shadow animation (with `prefers-reduced-motion: reduce` fallback that disables the animation). Bumped CACHE_VERSION v35 → v36. Verified CSS present live. Resolved R91.
 
