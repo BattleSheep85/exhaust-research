@@ -44,7 +44,7 @@ if(window.__loadInit)return;window.__loadInit=true;
 document.querySelectorAll('form.search-form').forEach(function(f){
 f.addEventListener('submit',function(){
 var tier=(f.querySelector('input[name="tier"]:checked')||{}).value||'instant';
-var wait=tier==='exhaustive'?'up to 3 minutes':(tier==='full'?'about 1 minute':'about 30 seconds');
+var wait=tier==='exhaustive'?'up to 7 minutes':(tier==='full'?'about 3 minutes':'about 90 seconds');
 var o=document.createElement('div');
 o.style.cssText='position:fixed;inset:0;background:rgba(12,17,25,0.94);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:9999;color:#fff;gap:1.25rem;padding:1rem;text-align:center';
 o.innerHTML='<div class="spinner"></div><div style="font-size:1.1rem;font-weight:600">Running research\u2026</div><div style="font-size:0.95rem;color:rgba(255,255,255,0.75);max-width:440px">Takes '+wait+'. Please keep this tab open \u2014 we\u2019ll redirect you automatically when it\u2019s ready.</div>';
