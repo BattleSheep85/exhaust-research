@@ -147,14 +147,20 @@ async function handleRequest(request: Request, env: Env, ctx: ExecutionContext):
 
       if (path === '/manifest.webmanifest') {
         const manifest = {
+          id: '/',
           name: 'Chrisputer Labs',
           short_name: 'Chrisputer',
           description: 'AI-powered product research backed by 20 years of IT expertise.',
           start_url: '/',
+          scope: '/',
           display: 'standalone',
+          orientation: 'portrait-primary',
+          lang: 'en-US',
+          dir: 'ltr',
+          categories: ['productivity', 'shopping', 'utilities'],
           background_color: '#020617',
           theme_color: '#2563eb',
-          icons: [{ src: '/favicon.svg', sizes: 'any', type: 'image/svg+xml' }],
+          icons: [{ src: '/favicon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any' }],
         };
         return new Response(JSON.stringify(manifest), {
           headers: { 'Content-Type': 'application/manifest+json', 'Cache-Control': 'public, max-age=86400' },

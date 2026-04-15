@@ -1,6 +1,8 @@
 # Issues
 
-Last updated: 2026-04-15 (keep-improving R100)
+Last updated: 2026-04-15 (keep-improving R101)
+
+- [x] LOW: `/manifest.webmanifest` was minimal — missing `id`, `scope`, `orientation`, `lang`, `dir`, `categories`, and icon `purpose` (`src/worker.ts`). Without `id`, Chrome's installed PWA heuristics can accidentally create duplicate installs when `start_url` changes; without `scope`, the installed app has no defined navigation boundary; without `categories`, app directories/installers can't classify it. Added all missing fields: `id:/`, `scope:/`, `orientation:portrait-primary`, `lang:en-US`, `dir:ltr`, `categories:[productivity,shopping,utilities]`, icon `purpose:any`. No CACHE_VERSION bump needed — manifest endpoint has its own response body, not rendered via layout(). Verified live. Resolved R101.
 
 - [x] LOW: Individual research pages in `/sitemap.xml` emitted `<loc><lastmod><changefreq>` but no `<priority>` (`src/worker.ts`) — home (1.0), browse (0.8), and about (0.3) all had priority set, but the 28+ research detail entries were unweighted. Google uses priority as a hint for crawl scheduling (relative, not absolute) — with no value, research pages default to 0.5 which equates them with the about page. Set to 0.6 so they sit above about (0.3) but below the dynamic index pages (home 1.0, browse 0.8), reflecting that they're leaf content important enough to recrawl but less so than the indexes that surface them. Verified live. Resolved R100.
 
