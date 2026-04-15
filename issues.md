@@ -1,6 +1,8 @@
 # Issues
 
-Last updated: 2026-04-15 (keep-improving R101)
+Last updated: 2026-04-15 (keep-improving R102)
+
+- [x] LOW: Atom feed entries lacked `<category term="…"/>` (`src/worker.ts`). RSS/Atom readers (Feedly, Inoreader, NewsBlur) use `<category>` to let users filter or tag subscriptions by topic. Each research row already carries a `category` column populated by the synthesis LLM — the feed just wasn't selecting it. Added `category` to the SELECT, guarded with `r.category ? … : ''` so rows with null category don't emit an empty tag. Verified live: `<category term="mesh WiFi"/>` now present. Resolved R102.
 
 - [x] LOW: `/manifest.webmanifest` was minimal — missing `id`, `scope`, `orientation`, `lang`, `dir`, `categories`, and icon `purpose` (`src/worker.ts`). Without `id`, Chrome's installed PWA heuristics can accidentally create duplicate installs when `start_url` changes; without `scope`, the installed app has no defined navigation boundary; without `categories`, app directories/installers can't classify it. Added all missing fields: `id:/`, `scope:/`, `orientation:portrait-primary`, `lang:en-US`, `dir:ltr`, `categories:[productivity,shopping,utilities]`, icon `purpose:any`. No CACHE_VERSION bump needed — manifest endpoint has its own response body, not rendered via layout(). Verified live. Resolved R101.
 

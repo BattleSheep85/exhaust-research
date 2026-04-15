@@ -611,7 +611,7 @@ function escapeXml(s: string): string {
 async function generateAtomFeed(origin: string, env: Env, ifModifiedSince: string | null): Promise<Response> {
   const rows = await env.DB.prepare(
     `WITH ranked AS (
-       SELECT r.slug, r.query, r.summary, r.created_at, COALESCE(r.completed_at, r.created_at) AS updated,
+       SELECT r.slug, r.query, r.summary, r.category, r.created_at, COALESCE(r.completed_at, r.created_at) AS updated,
               ROW_NUMBER() OVER (PARTITION BY COALESCE(r.canonical_query, r.slug) ORDER BY r.created_at DESC) AS rn
        FROM research r
        WHERE r.status = 'complete'
@@ -619,10 +619,10 @@ async function generateAtomFeed(origin: string, env: Env, ifModifiedSince: strin
          AND LENGTH(r.query) >= 10 AND r.query LIKE '% %'
          AND r.query NOT LIKE 'test %' AND r.query NOT LIKE 'verify %'
      )
-     SELECT slug, query, summary, created_at, updated FROM ranked WHERE rn = 1
+     SELECT slug, query, summary, category, created_at, updated FROM ranked WHERE rn = 1
      ORDER BY updated DESC
      LIMIT 50`
-  ).all<{ slug: string; query: string; summary: string | null; created_at: number; updated: number }>();
+  ).all<{ slug: string; query: string; summary: string | null; category: string | null; created_at: number; updated: number }>();
 
   const results = rows.results ?? [];
   const latestUpdated = results[0]?.updated ?? Math.floor(Date.now() / 1000);
@@ -642,13 +642,14 @@ async function generateAtomFeed(origin: string, env: Env, ifModifiedSince: strin
     const summary = r.summary ? escapeXml(r.summary.slice(0, 500)) : '';
     // Per RFC 4287 §4.2.1, atom:author is recommended on each entry; readers
     // (Inoreader, Feedly) attribute "Unknown author" without it.
+    const category = r.category ? `\n<category term="${escapeXml(r.category)}"/>` : '';
     return `<entry>
 <id>${link}</id>
 <title>${escapeXml(displayQuery(r.query))}</title>
 <link href="${link}"/>
 <published>${published}</published>
 <updated>${updated}</updated>
-<author><name>Chrisputer Labs</name><uri>${origin}/</uri></author>
+<author><name>Chrisputer Labs</name><uri>${origin}/</uri></author>${category}
 <summary>${summary}</summary>
 </entry>`;
   }).join('\n');
