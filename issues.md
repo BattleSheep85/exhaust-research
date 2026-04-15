@@ -1,6 +1,8 @@
 # Issues
 
-Last updated: 2026-04-14 (keep-improving R90)
+Last updated: 2026-04-14 (keep-improving R91)
+
+- [x] LOW: Product cards use `<article class="product" id="product-N">` but the global scroll-margin-top CSS only targeted `h1[id],h2[id],h3[id],section[id]` (`src/lib/html.ts`). Deep-links to `#product-3` scrolled the card flush to the sticky-nav top instead of a pleasant 1rem offset, and users clicking a shared anchor had no visual cue where they landed. Added `h4[id]` and `article[id]` to the selector, plus an `article[id]:target` outline + 1.5s pulse box-shadow animation (with `prefers-reduced-motion: reduce` fallback that disables the animation). Bumped CACHE_VERSION v35 → v36. Verified CSS present live. Resolved R91.
 
 - [x] MED: Generic 500 error page was a dead end — "Something went wrong. Try again." + single "Go home" link, and no `noindex` (`src/worker.ts`). If Google ever crawled through a transient error, it could index the error content at the page URL. R68 (404) and R69 (research-failed) got recovery UX but the catch-all 500 was overlooked. Added a danger-colored error icon, compact search bar, Browse + Home buttons, and `<meta name="robots" content="noindex, nofollow">`. Cache-Control already `no-store` for status 500. Resolved R90.
 

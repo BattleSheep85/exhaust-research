@@ -138,7 +138,10 @@ const CSS = `
 html{scroll-behavior:smooth}
 @media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
 :target{scroll-margin-top:1rem}
-h1[id],h2[id],h3[id],section[id]{scroll-margin-top:1rem}
+h1[id],h2[id],h3[id],h4[id],section[id],article[id]{scroll-margin-top:1rem}
+article[id]:target{outline:2px solid var(--primary);outline-offset:4px;border-radius:var(--radius);animation:target-pulse 1.5s ease-out}
+@keyframes target-pulse{0%{box-shadow:0 0 0 0 rgba(37,99,235,.4)}100%{box-shadow:0 0 0 12px rgba(37,99,235,0)}}
+@media (prefers-reduced-motion:reduce){article[id]:target{animation:none}}
 :root{
   --bg:#020617;--surface:#0f172a;--surface2:#1e293b;--surface3:#334155;
   --text:#f1f5f9;--text2:#94a3b8;--text3:#64748b;
