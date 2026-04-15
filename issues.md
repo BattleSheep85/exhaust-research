@@ -1,6 +1,8 @@
 # Issues
 
-Last updated: 2026-04-14 (keep-improving R85)
+Last updated: 2026-04-14 (keep-improving R86)
+
+- [x] LOW: HTML responses were missing `Content-Language` and `Vary: Accept-Encoding` (`src/worker.ts`). Content-Language mirrors the `<html lang="en">` attribute for HTTP-layer consumers (feeds/caches/translators). Without `Vary: Accept-Encoding`, intermediate caches (corporate proxies, browser caches) can serve a gzipped body to clients that didn't accept gzip. CF handles origin compression correctly but downstream layers need the Vary hint. Added both to htmlResponse(). Verified live. Resolved R86.
 
 - [x] LOW: Research result Article JSON-LD was outside the site graph (`src/pages/research-result.ts`) — no `@id`, no `url`, no `isPartOf`, and `author`/`publisher` were declared inline Organizations without the `@id` link to `#organization`. Google and graph consumers couldn't unify the Article's publisher with the home-page Organization entity. Added Article `@id: pageUrl#article`, `url`, `isPartOf: #website`, and pointed `author`/`publisher` at the `#organization` `@id` while keeping the inline fields (Google's Article rich-result doc still recommends publisher carry `@type`/`name`/`logo`). Bumped CACHE_VERSION v33 → v34 to invalidate the per-slug KV blobs. Resolved R85.
 

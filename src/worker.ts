@@ -582,6 +582,8 @@ function htmlResponse(body: string, status = 200, analyticsToken?: string, adsen
   }
   const headers: Record<string, string> = {
     'Content-Type': 'text/html;charset=utf-8',
+    'Content-Language': 'en',
+    Vary: 'Accept-Encoding',
     'Strict-Transport-Security': 'max-age=31536000; includeSubDomains',
     'X-Content-Type-Options': 'nosniff',
     'Referrer-Policy': 'strict-origin-when-cross-origin',
