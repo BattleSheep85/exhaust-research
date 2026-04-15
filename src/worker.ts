@@ -11,7 +11,7 @@ import { getTierConfig, isValidTier } from './lib/research-config';
 // Bump when the page template/schema shape changes in a way that should
 // invalidate every cached HTML blob. Old keys age out on their own TTL
 // (home: 5m, research result: 1h) so bumping is a soft cutover, not a purge.
-const CACHE_VERSION = 'v38';
+const CACHE_VERSION = 'v39';
 
 // Update when /about page content materially changes. Signals freshness to
 // crawlers so the page gets re-crawled after structured-data or copy edits.

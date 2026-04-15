@@ -70,6 +70,7 @@ export function layout(title: string, description: string, body: string, extra_h
 <meta property="og:description" content="${escapedDesc}">
 <meta property="og:type" content="${ogType}">${ogUrl}
 <meta property="og:site_name" content="Chrisputer Labs">
+<meta property="og:locale" content="en_US">
 <meta property="og:image" content="${escapeHtml(ogImage)}">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">

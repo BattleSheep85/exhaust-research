@@ -1,6 +1,8 @@
 # Issues
 
-Last updated: 2026-04-14 (keep-improving R98)
+Last updated: 2026-04-15 (keep-improving R99)
+
+- [x] LOW: Every page was missing `<meta property="og:locale" content="en_US">` (`src/lib/html.ts`). Facebook's Open Graph spec lists `og:locale` as recommended, and LinkedIn uses it for locale-aware preview rendering and to decide whether to translate the snippet. Without it, share parsers fall back to guessing from the HTML `lang` attribute or geo — imperfect. Added `en_US` in the shared layout so every page (home, browse, research, about, 404, errors) emits it. Bumped CACHE_VERSION v38 → v39 to flush cached HTML blobs. Verified live on home, research result, and /about via no-cache fetch. Resolved R99.
 
 - [x] LOW: `/humans.txt` and `/browserconfig.xml` returned the 20KB HTML 404 page (`src/worker.ts`). Browsers, scanners, and link checkers probe both convention paths — humans.txt is a web tradition (credits/tech stack), browserconfig.xml is the legacy Windows Start Menu tile config. Served small real bodies instead: humans.txt credits Chris + lists the stack; browserconfig.xml points the 150×150 tile to favicon.svg with theme color #2563eb. Cheaper responses (~200 bytes vs 20KB), friendlier to drive-by requests, and one small branding surface. Resolved R98.
 
