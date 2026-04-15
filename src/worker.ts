@@ -78,6 +78,17 @@ async function handleRequest(request: Request, env: Env, ctx: ExecutionContext):
       return Response.redirect(dest.toString(), 301);
     }
 
+    // Fast-fail for known scanner/bot probes. These paths have zero legitimate
+    // use on this site (we don't run PHP, WordPress, Git, etc.) — returning a
+    // tiny text/plain 404 saves ~20KB of HTML-404 rendering per probe and
+    // reduces CF egress from drive-by vulnerability scanners.
+    if (isScannerProbe(path)) {
+      return new Response('Not Found', {
+        status: 404,
+        headers: { 'Content-Type': 'text/plain;charset=utf-8', 'Cache-Control': 'public, max-age=3600' },
+      });
+    }
+
     try {
       // Static files
       if (path === '/favicon.svg') {
@@ -570,6 +581,23 @@ ${entries}
       'Last-Modified': lastModifiedHttp,
     },
   });
+}
+
+const SCANNER_PATH_PREFIXES: ReadonlyArray<string> = [
+  '/wp-', '/wordpress', '/phpmyadmin', '/pma/', '/xmlrpc',
+  '/.env', '/.git', '/.svn', '/.DS_Store', '/.aws',
+  '/_ignition', '/vendor/phpunit', '/actuator',
+  '/cgi-bin/', '/admin/', '/administrator/', '/webdav/',
+  '/server-status', '/HNAP1', '/solr/', '/boaform/',
+];
+const SCANNER_PATH_EXTS = /\.(php|asp|aspx|jsp|cgi|do|action|cfm|rb)$/i;
+
+function isScannerProbe(path: string): boolean {
+  if (SCANNER_PATH_EXTS.test(path)) return true;
+  for (const p of SCANNER_PATH_PREFIXES) {
+    if (path.startsWith(p)) return true;
+  }
+  return false;
 }
 
 function htmlResponse(body: string, status = 200, analyticsToken?: string, adsensePublisherId?: string, lastModifiedSec?: number): Response {

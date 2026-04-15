@@ -1,6 +1,8 @@
 # Issues
 
-Last updated: 2026-04-14 (keep-improving R86)
+Last updated: 2026-04-14 (keep-improving R87)
+
+- [x] MED: Bot/scanner probes (`/wp-admin`, `/.env`, `/.git/config`, `/index.php`, `/xmlrpc.php`, etc.) returned the 20KB HTML 404 page (`src/worker.ts`). Vulnerability scanners hit dozens of these paths per scan — for a site that doesn't run PHP, WordPress, Git, or Java stacks, these are pure waste. Added `isScannerProbe()` fast-fail at the top of the request handler: matches file-ext patterns (`.php`, `.asp`, `.aspx`, `.jsp`, `.cgi`, `.do`, `.action`, `.cfm`, `.rb`) and prefix list (`/wp-`, `/wordpress`, `/phpmyadmin`, `/.env`, `/.git`, `/.svn`, `/.DS_Store`, `/.aws`, `/_ignition`, `/vendor/phpunit`, `/actuator`, `/cgi-bin/`, `/admin/`, `/administrator/`, `/webdav/`, `/server-status`, `/HNAP1`, `/solr/`, `/boaform/`). Returns 9-byte `text/plain` 404 with 1-hour public cache (CF edge will absorb repeated hits). Saves ~20KB per probe × typical scanner fanout = meaningful egress reduction. Resolved R87.
 
 - [x] LOW: HTML responses were missing `Content-Language` and `Vary: Accept-Encoding` (`src/worker.ts`). Content-Language mirrors the `<html lang="en">` attribute for HTTP-layer consumers (feeds/caches/translators). Without `Vary: Accept-Encoding`, intermediate caches (corporate proxies, browser caches) can serve a gzipped body to clients that didn't accept gzip. CF handles origin compression correctly but downstream layers need the Vary hint. Added both to htmlResponse(). Verified live. Resolved R86.
 
