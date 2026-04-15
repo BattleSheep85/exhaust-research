@@ -1,6 +1,8 @@
 # Issues
 
-Last updated: 2026-04-14 (keep-improving R89)
+Last updated: 2026-04-14 (keep-improving R90)
+
+- [x] MED: Generic 500 error page was a dead end — "Something went wrong. Try again." + single "Go home" link, and no `noindex` (`src/worker.ts`). If Google ever crawled through a transient error, it could index the error content at the page URL. R68 (404) and R69 (research-failed) got recovery UX but the catch-all 500 was overlooked. Added a danger-colored error icon, compact search bar, Browse + Home buttons, and `<meta name="robots" content="noindex, nofollow">`. Cache-Control already `no-store` for status 500. Resolved R90.
 
 - [x] HIGH: `/research/new?q=...` violated HTTP GET semantics — a GET from Googlebot (or any crawler that ignores robots.txt Disallow) created a new research entry with a real LLM run and published slug (`src/worker.ts`). Verified: a Googlebot-UA curl to `/research/new?q=verify+r89` created `test-r89-c8e43689` (and historically `test-gizmo-xyzqq-07a60134` leaked the same way). Polluted the sitemap/feed/home and burned OpenRouter tokens per scanner hit. Fixed by detecting bot UAs (`googlebot|bingbot|yandex|baiduspider|duckduckbot|applebot|facebookexternalhit|twitterbot|linkedinbot|slackbot|discordbot|whatsapp|telegrambot|pinterest|redditbot|msnbot|petalbot|semrushbot|ahrefsbot|mj12bot|dotbot|seznambot|screaming frog|bytespider|claudebot|gptbot|ccbot|anthropic-ai|cohere-ai|perplexitybot|crawler|spider`) and redirecting them to `/research?q=…` (existing browse) instead of triggering a run. Empty UA also treated as bot. Verified: Googlebot-UA now 302s to `/research?q=...`; legit Chrome/Firefox/Safari/iPhone UAs pass through. Resolved R89.
 

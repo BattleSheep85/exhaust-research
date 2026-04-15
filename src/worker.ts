@@ -328,11 +328,16 @@ ${searchBar('compact')}
     } catch (error) {
       console.error('Unhandled error:', error);
       return htmlResponse(
-        layout('Error', 'Something went wrong.', `<div class="container empty">
+        layout('Error', 'Something went wrong. Browse existing research or head back home.', `<div class="container empty" style="padding:4rem 1.5rem;max-width:40rem;margin:0 auto;text-align:center">
+<div class="empty-icon" style="background:rgba(239,68,68,.15);color:var(--danger)"><svg width="32" height="32" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg></div>
 <h2>Something went wrong</h2>
-<p>Please try again.</p>
-<a href="/" class="btn" style="margin-top:1rem">Go home</a>
-</div>`),
+<p style="color:var(--text2);margin-bottom:1.5rem">Our end hit a snag. It's probably transient — try again, or poke around while we recover.</p>
+${searchBar('compact', env.TURNSTILE_SITE_KEY)}
+<div style="display:flex;gap:.5rem;margin-top:1.5rem;flex-wrap:wrap;justify-content:center">
+<a href="/research" class="btn btn-ghost">Browse research</a>
+<a href="/" class="btn btn-ghost">Go home</a>
+</div>
+</div>`, '<meta name="robots" content="noindex, nofollow">'),
         500, at, adPub,
       );
     }
