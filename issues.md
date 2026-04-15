@@ -1,6 +1,8 @@
 # Issues
 
-Last updated: 2026-04-14 (keep-improving R96)
+Last updated: 2026-04-14 (keep-improving R97)
+
+- [x] MED: Home (`/`) and browse (`/research`) had no `Last-Modified` / `If-Modified-Since` support (`src/worker.ts`). Every Googlebot / Bingbot / returning-user revisit re-transferred the full ~35KB HTML. Added `getLatestResearchLastmod()` helper (single `SELECT MAX(completed_at)` with the same filters as sitemap/feed) running in parallel with the KV cache lookup, wired through `maybe304`. Kept the 60s/60s cache-control (home/browse need to reflect new research within a minute — not the research-result page's 300s/3600s). Extended both `maybe304` and `htmlResponse` with an optional `cacheControl` param so callers can opt out of the aggressive research-result default when freshness matters. Verified: home and /research return `HTTP/2 304` on IMS > lastmod, with `cache-control: max-age=60, s-maxage=60, stale-while-revalidate=3600`. Resolved R97.
 
 - [x] LOW: `/about` sent no `Last-Modified` header and didn't honor `If-Modified-Since` (`src/worker.ts`). The `ABOUT_LASTMOD` constant (bumped manually when /about materially changes) was only wired into the sitemap — serving it on the page response itself lets Googlebot skip re-fetching unchanged copy and lets CF edge revalidate cheaply. Wired `ABOUT_LASTMOD` into both the 304 check (via existing `maybe304` helper) and the 200 response's `Last-Modified` header. Verified: `Last-Modified: Tue, 14 Apr 2026 00:00:00 GMT` on 200, `HTTP/2 304` when IMS > lastmod. Resolved R96.
 

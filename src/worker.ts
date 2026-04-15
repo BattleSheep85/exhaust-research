@@ -242,11 +242,17 @@ async function handleRequest(request: Request, env: Env, ctx: ExecutionContext):
       // Home (cached 5 min)
       if (path === '/' || path === '') {
         const homeKey = `page:${CACHE_VERSION}:home`;
-        const cached = await env.CACHE.get(homeKey);
-        if (cached) return htmlResponse(cached, 200, at, adPub);
+        const [cached, latestLm] = await Promise.all([
+          env.CACHE.get(homeKey),
+          getLatestResearchLastmod(env),
+        ]);
+        const listingCc = 'public, max-age=60, s-maxage=60, stale-while-revalidate=3600';
+        const notModified = maybe304(request.headers.get('If-Modified-Since'), latestLm, listingCc);
+        if (notModified) return notModified;
+        if (cached) return htmlResponse(cached, 200, at, adPub, latestLm, listingCc);
         const html = await renderHome(env);
         ctx.waitUntil(env.CACHE.put(homeKey, html, { expirationTtl: 300 }));
-        return htmlResponse(html, 200, at, adPub);
+        return htmlResponse(html, 200, at, adPub, latestLm, listingCc);
       }
 
       // Research new (triggers API then redirects)
@@ -256,7 +262,14 @@ async function handleRequest(request: Request, env: Env, ctx: ExecutionContext):
 
       // Research browse
       if (path === '/research' || path === '/research/') {
-        return htmlResponse(await renderBrowse(url, env), 200, at, adPub);
+        const [html, latestLm] = await Promise.all([
+          renderBrowse(url, env),
+          getLatestResearchLastmod(env),
+        ]);
+        const listingCc = 'public, max-age=60, s-maxage=60, stale-while-revalidate=3600';
+        const notModified = maybe304(request.headers.get('If-Modified-Since'), latestLm, listingCc);
+        if (notModified) return notModified;
+        return htmlResponse(html, 200, at, adPub, latestLm, listingCc);
       }
 
       // Dynamic OG image for research results
@@ -666,10 +679,26 @@ function isScannerProbe(path: string): boolean {
   return false;
 }
 
+// Newest completed research timestamp — shared lastmod signal for home,
+// browse, sitemap, and feed. Single small query; SQLite optimizer uses the
+// created_at index so it's effectively O(1).
+async function getLatestResearchLastmod(env: Env): Promise<number | undefined> {
+  const row = await env.DB.prepare(
+    `SELECT MAX(COALESCE(completed_at, created_at)) AS lm
+     FROM research
+     WHERE status = 'complete'
+       AND EXISTS (SELECT 1 FROM products p WHERE p.research_id = research.id)
+       AND LENGTH(query) >= 10 AND query LIKE '% %'
+       AND query NOT LIKE 'test %' AND query NOT LIKE 'verify %'`
+  ).first<{ lm: number | null }>();
+  const lm = row?.lm;
+  return lm && lm > 0 ? lm : undefined;
+}
+
 // Returns a 304 Not Modified if the client's If-Modified-Since covers the
 // resource's last-modified timestamp. Caller is still responsible for caching
 // the payload alongside (so the next cold request doesn't re-render).
-function maybe304(ifModifiedSince: string | null, lastModifiedSec: number | undefined): Response | null {
+function maybe304(ifModifiedSince: string | null, lastModifiedSec: number | undefined, cacheControl?: string): Response | null {
   if (!ifModifiedSince || !lastModifiedSec) return null;
   const since = Date.parse(ifModifiedSince);
   if (isNaN(since)) return null;
@@ -678,12 +707,12 @@ function maybe304(ifModifiedSince: string | null, lastModifiedSec: number | unde
     status: 304,
     headers: {
       'Last-Modified': new Date(lastModifiedSec * 1000).toUTCString(),
-      'Cache-Control': 'public, max-age=300, s-maxage=3600, stale-while-revalidate=86400',
+      'Cache-Control': cacheControl ?? 'public, max-age=300, s-maxage=3600, stale-while-revalidate=86400',
     },
   });
 }
 
-function htmlResponse(body: string, status = 200, analyticsToken?: string, adsensePublisherId?: string, lastModifiedSec?: number): Response {
+function htmlResponse(body: string, status = 200, analyticsToken?: string, adsensePublisherId?: string, lastModifiedSec?: number, cacheControl?: string): Response {
   let out = body;
   if (adsensePublisherId) {
     out = out.replace('</head>', `<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-${adsensePublisherId}" crossorigin="anonymous"></script>\n</head>`);
@@ -717,6 +746,10 @@ function htmlResponse(body: string, status = 200, analyticsToken?: string, adsen
   };
   if (lastModifiedSec) {
     headers['Last-Modified'] = new Date(lastModifiedSec * 1000).toUTCString();
+  }
+  if (cacheControl) {
+    headers['Cache-Control'] = cacheControl;
+  } else if (lastModifiedSec) {
     headers['Cache-Control'] = 'public, max-age=300, s-maxage=3600, stale-while-revalidate=86400';
   } else if (status === 200) {
     headers['Cache-Control'] = 'public, max-age=60, s-maxage=60, stale-while-revalidate=3600';
