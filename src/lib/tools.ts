@@ -1,5 +1,5 @@
 import type { ScrapedSource, AgentState, ResearchConfig, ToolCallObj } from '../types';
-import { braveWeb, braveNews, braveVideos, hackerNews, BRAVE_SPACING_MS, sleep } from './scraper';
+import { tavilySearch, hackerNews } from './scraper';
 import { duckduckgoSearch } from './duckduckgo';
 import { rssSearch } from './rss';
 import { fetchPageContent } from './jina';
@@ -18,8 +18,8 @@ export const AGENT_TOOLS = [
           query: { type: 'string', description: 'Search query. Be specific — include product names, model numbers, years.' },
           provider: {
             type: 'string',
-            enum: ['brave', 'news', 'video', 'hackernews', 'duckduckgo', 'rss'],
-            description: 'Search provider. brave=general web, news=recent articles, video=YouTube reviews, hackernews=tech discussions, duckduckgo=alternative web results, rss=expert review sites (Wirecutter/RTINGS/etc).',
+            enum: ['web', 'news', 'video', 'hackernews', 'duckduckgo', 'rss'],
+            description: 'Search provider. web=general web (Tavily), news=recent articles, video=YouTube reviews, hackernews=tech discussions, duckduckgo=alternative web results, rss=expert review sites (Wirecutter/RTINGS/etc).',
           },
         },
         required: ['query'],
@@ -63,23 +63,12 @@ export const AGENT_TOOLS = [
 
 // ─── Tool execution ──────────────────────────────────────────────────────────
 
-let lastBraveCallTime = 0;
-
-async function enforceRateLimit(): Promise<void> {
-  const now = Date.now();
-  const elapsed = now - lastBraveCallTime;
-  if (elapsed < BRAVE_SPACING_MS) {
-    await sleep(BRAVE_SPACING_MS - elapsed);
-  }
-  lastBraveCallTime = Date.now();
-}
-
 /** Returns [resultText, subrequestsUsed] */
 export async function executeTool(
   toolCall: ToolCallObj,
   state: AgentState,
   config: ResearchConfig,
-  braveApiKey: string,
+  tavilyApiKey: string,
 ): Promise<[string, number]> {
   const name = toolCall.function.name;
   let args: Record<string, unknown>;
@@ -91,7 +80,7 @@ export async function executeTool(
 
   switch (name) {
     case 'web_search':
-      return executeSearch(args, state, config, braveApiKey);
+      return executeSearch(args, state, config, tavilyApiKey);
     case 'read_page':
       return executeReadPage(args, state, config);
     case 'note':
@@ -105,14 +94,14 @@ async function executeSearch(
   args: Record<string, unknown>,
   state: AgentState,
   config: ResearchConfig,
-  braveApiKey: string,
+  tavilyApiKey: string,
 ): Promise<[string, number]> {
   if (state.searchCount >= config.maxSearches) {
     return ['Search budget exhausted. Use note() to record findings or stop.', 0];
   }
 
   const query = typeof args.query === 'string' ? args.query : '';
-  const provider = typeof args.provider === 'string' ? args.provider : 'brave';
+  const provider = typeof args.provider === 'string' ? args.provider : 'web';
 
   if (!query) return ['Error: query is required', 0];
 
@@ -121,24 +110,21 @@ async function executeSearch(
   let subs = 0;
 
   switch (provider) {
-    case 'brave': {
-      await enforceRateLimit();
-      results = await braveWeb(query, braveApiKey);
+    case 'web':
+      results = await tavilySearch(query, tavilyApiKey, { searchDepth: 'basic', sourceLabel: 'web' });
       subs = 1;
       break;
-    }
-    case 'news': {
-      await enforceRateLimit();
-      results = await braveNews(query, braveApiKey);
+    case 'news':
+      results = await tavilySearch(query, tavilyApiKey, { topic: 'news', timeRange: 'y', sourceLabel: 'news' });
       subs = 1;
       break;
-    }
-    case 'video': {
-      await enforceRateLimit();
-      results = await braveVideos(query, braveApiKey);
+    case 'video':
+      results = await tavilySearch(query, tavilyApiKey, {
+        includeDomains: ['youtube.com', 'youtu.be'],
+        sourceLabel: 'video',
+      });
       subs = 1;
       break;
-    }
     case 'hackernews':
       results = await hackerNews(query);
       subs = 1;
@@ -152,7 +138,7 @@ async function executeSearch(
       subs = 6; // up to 6 RSS feeds fetched in parallel
       break;
     default:
-      results = await braveWeb(query, braveApiKey);
+      results = await tavilySearch(query, tavilyApiKey, { searchDepth: 'basic', sourceLabel: 'web' });
       subs = 1;
       break;
   }

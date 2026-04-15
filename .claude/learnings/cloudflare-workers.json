@@ -15,6 +15,16 @@
       "context": "Cloudflare Workers, src/lib/*.ts, module-level constants",
       "discovered": "2026-04-11",
       "severity": "HIGH"
+    },
+    {
+      "id": "waituntil-30s-hard-limit",
+      "bad_pattern": "ctx.waitUntil(longRunningJob()) for work that can exceed 30 seconds",
+      "good_pattern": "Either await the job inline in the fetch handler (15-min request-duration limit on paid plan) OR offload to Queues / Durable Objects / Workflows",
+      "regex": "ctx\\.waitUntil\\(",
+      "description": "ctx.waitUntil() gets ONLY 30 seconds of extension after the fetch handler returns — regardless of `limits.cpu_ms` in wrangler.jsonc. `cpu_ms` bounds the fetch handler's active CPU time, it does NOT extend the waitUntil tail. If the tail exceeds 30s, CF kills it silently with a warn-level log (`waitUntil() tasks did not complete within the allowed time after invocation end and have been cancelled`) — no exception is raised in user code, so any `try/catch` inside the waitUntil job never runs. This makes background jobs look like hangs: D1 rows inserted as 'processing' stay 'processing' forever because the outer catch that would mark 'failed' is inside the killed isolate. The 15-min duration limit on paid plans only applies to the fetch handler's own lifetime (i.e. while it is still awaiting), not the tail. To run long jobs: (a) await them before returning the response (user waits for long POST), (b) use a streaming Response body so the handler itself stays active while the client reads, or (c) enqueue to CF Queues / Durable Objects / Workflows.",
+      "context": "Cloudflare Workers, long-running background work, src/pages/api.ts-style endpoints",
+      "discovered": "2026-04-15",
+      "severity": "CRITICAL"
     }
   ]
 }

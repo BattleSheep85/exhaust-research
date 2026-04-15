@@ -2,7 +2,7 @@ export interface Env {
   DB: D1Database;
   CACHE: KVNamespace;
   OPENROUTER_API_KEY: string;
-  BRAVE_API_KEY: string;
+  TAVILY_API_KEY: string;
   AMAZON_AFFILIATE_TAG: string;
   TURNSTILE_SITE_KEY?: string;
   TURNSTILE_SECRET_KEY?: string;
@@ -24,6 +24,7 @@ export interface ResearchConfig {
   timeoutMs: number;
   synthModel: string;
   plannerModel: string;
+  synthReasoningEffort?: 'low' | 'medium' | 'high';
   reportSections: string[];
   requireTurnstile: boolean;
   requireSubscription: boolean;

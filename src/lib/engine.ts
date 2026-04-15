@@ -35,7 +35,7 @@ CURRENT YEAR: ${currentYear}. Prioritize recent data. Discount sources older tha
 BUDGET: ${config.maxSearches} searches, ${config.maxFetches} page reads, ${config.maxToolCalls} total tool calls.
 
 STRATEGY:
-1. Start with 3-5 broad searches across different providers (brave, news, video, duckduckgo, rss) to discover the landscape.
+1. Start with 3-5 broad searches across different providers (web, news, video, duckduckgo, rss) to discover the landscape.
 2. Identify the top candidate products from initial results.
 3. Search for each top candidate by name + "review" to find detailed evaluations.
 4. Use read_page on the most promising expert reviews (PCMag, Wirecutter, RTINGS, Tom's Hardware, etc.) and detailed comparison articles.
@@ -45,10 +45,10 @@ STRATEGY:
 8. When you've covered all angles or used most of your budget, stop calling tools.
 
 PROVIDERS:
-- brave: General web search (best for broad coverage)
+- web: General web search via Tavily (best for broad coverage, high-quality results)
 - news: Recent news articles (best for new releases, announcements)
 - video: YouTube reviews (best for hands-on evaluations)
-- duckduckgo: Alternative web results (different index than Brave)
+- duckduckgo: Alternative web results (different index than Tavily)
 - hackernews: Tech community discussions (best for technical opinions)
 - rss: Expert review sites — Wirecutter, RTINGS, Tom's Hardware, etc. (best for curated expert picks)
 
@@ -142,6 +142,18 @@ Respond ONLY with valid JSON.`;
 
 // ─── LLM call ────────────────────────────────────────────────────────────────
 
+// Budget for OpenRouter calls, scaled to reasoning effort. Extended thinking
+// adds a silent pre-generation phase (30-90s for 'medium', 60-180s for 'high'),
+// so a fixed 120s ceiling is too tight for exhaustive/unbound tiers.
+function llmBudgetMs(effort?: 'low' | 'medium' | 'high'): { hardMs: number; chunkMs: number } {
+  switch (effort) {
+    case 'high': return { hardMs: 360_000, chunkMs: 180_000 };
+    case 'medium': return { hardMs: 240_000, chunkMs: 120_000 };
+    case 'low': return { hardMs: 180_000, chunkMs: 90_000 };
+    default: return { hardMs: 120_000, chunkMs: 75_000 };
+  }
+}
+
 // Stream an OpenRouter completion and surface incremental content via onToken.
 // Uses a per-chunk watchdog (not just overall timeout) so a stuck stream aborts
 // promptly — the historical hang that motivated `await response.text()` came
@@ -151,13 +163,15 @@ async function callLLMStreaming(
   model: string,
   messages: ChatMessage[],
   onToken: (delta: string, accumulated: string) => void,
+  reasoningEffort?: 'low' | 'medium' | 'high',
 ): Promise<string> {
+  const { hardMs, chunkMs } = llmBudgetMs(reasoningEffort);
   const controller = new AbortController();
-  const hardTimer = setTimeout(() => controller.abort('hard'), 60_000);
+  const hardTimer = setTimeout(() => controller.abort('hard'), hardMs);
   let chunkTimer: ReturnType<typeof setTimeout> | null = null;
   const armChunk = () => {
     if (chunkTimer) clearTimeout(chunkTimer);
-    chunkTimer = setTimeout(() => controller.abort('chunk'), 25_000);
+    chunkTimer = setTimeout(() => controller.abort('chunk'), chunkMs);
   };
 
   try {
@@ -171,7 +185,13 @@ async function callLLMStreaming(
         'X-Title': 'Chrisputer Labs',
         Accept: 'text/event-stream',
       },
-      body: JSON.stringify({ model, messages, stream: true }),
+      body: JSON.stringify({
+        model,
+        messages,
+        stream: true,
+        max_tokens: 8192,
+        ...(reasoningEffort ? { reasoning: { effort: reasoningEffort } } : {}),
+      }),
     });
 
     if (!response.ok || !response.body) {
@@ -221,6 +241,7 @@ async function callLLM(
   model: string,
   messages: ChatMessage[],
   tools?: typeof AGENT_TOOLS,
+  reasoningEffort?: 'low' | 'medium' | 'high',
 ): Promise<OpenRouterResponse> {
   const body: Record<string, unknown> = {
     model,
@@ -230,10 +251,15 @@ async function callLLM(
     body.tools = tools;
     body.tool_choice = 'auto';
   }
+  if (reasoningEffort) {
+    body.reasoning = { effort: reasoningEffort };
+  }
 
-  // Use a single AbortController for both fetch + body read
+  // Use a single AbortController for both fetch + body read.
+  // Scale timeout to reasoning effort — medium/high thinking phases alone can run 60-180s.
+  const { hardMs } = llmBudgetMs(reasoningEffort);
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 45_000);
+  const timer = setTimeout(() => controller.abort(), hardMs);
 
   try {
     const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
@@ -326,7 +352,7 @@ export async function runEngine(
   query: string,
   config: ResearchConfig,
   openrouterKey: string,
-  braveApiKey: string,
+  tavilyApiKey: string,
   db: D1Database,
   researchId: string,
 ): Promise<EngineResult> {
@@ -462,7 +488,7 @@ export async function runEngine(
       await writeEvent(db, researchId, state.eventSeq++, tc.function.name === 'note' ? 'note' : tc.function.name === 'read_page' ? 'fetch' : 'search', eventMsg, tc.function.arguments);
 
       // Execute the tool
-      const [result, subs] = await executeTool(tc, state, config, braveApiKey);
+      const [result, subs] = await executeTool(tc, state, config, tavilyApiKey);
       subrequestsUsed += subs;
 
       messages.push({
@@ -500,35 +526,37 @@ export async function runEngine(
     }
   };
 
+  // Use SSE streaming for synthesis. Rationale: OpenRouter's non-streaming mode
+  // sends SSE-style `:` keep-alive comments every ~2s during upstream generation
+  // (chunked transfer-encoding on an application/json body). A per-chunk timer
+  // gets reset by those keep-alives, so a silent-upstream hang never aborts.
+  // In SSE mode we parse keep-alives as non-data lines and rely on the 120s
+  // hard-timer backstop in callLLMStreaming to guarantee forward progress.
+  const synthMessages: ChatMessage[] = [
+    { role: 'system', content: synthPrompt },
+    { role: 'user', content: `Write the research report for: "${query}". Respond ONLY with valid JSON.` },
+  ];
   let synthContent = '';
   try {
-    let firstToken = true;
     synthContent = await callLLMStreaming(
       openrouterKey,
       config.synthModel,
-      [
-        { role: 'system', content: synthPrompt },
-        { role: 'user', content: `Write the research report for: "${query}". Respond ONLY with valid JSON.` },
-      ],
-      (_delta, accumulated) => {
-        if (firstToken) {
-          firstToken = false;
-          void writeEvent(db, researchId, state.eventSeq++, 'synthesize', 'Drafting report...');
-        }
-        announceProduct(accumulated);
-      },
+      synthMessages,
+      (_delta, accumulated) => announceProduct(accumulated),
+      config.synthReasoningEffort,
     );
   } catch (err) {
-    console.error('[engine] synthesis stream failed, falling back to non-streaming:', err);
-    const synthResponse = await callLLM(
+    const errMsg = err instanceof Error ? err.message : String(err);
+    console.error('[engine] synth stream failed:', errMsg);
+    await writeEvent(db, researchId, state.eventSeq++, 'status', 'Retrying report...');
+    const retry = await callLLM(
       openrouterKey,
       config.synthModel,
-      [
-        { role: 'system', content: synthPrompt },
-        { role: 'user', content: `Write the research report for: "${query}". Respond ONLY with valid JSON.` },
-      ],
+      synthMessages,
+      undefined,
+      config.synthReasoningEffort,
     );
-    synthContent = synthResponse.choices?.[0]?.message?.content ?? '';
+    synthContent = retry.choices?.[0]?.message?.content ?? '';
   }
 
   if (!synthContent) {
@@ -558,6 +586,8 @@ export async function runEngine(
         { role: 'system', content: synthPrompt },
         { role: 'user', content: `Write the research report for: "${query}". Respond ONLY with valid JSON.` },
       ],
+      undefined,
+      config.synthReasoningEffort,
     );
     const retryContent = retryResponse.choices?.[0]?.message?.content ?? '';
     parsed = extractJson(retryContent);
@@ -586,7 +616,7 @@ function safeParseArgs(argsStr: string): Record<string, unknown> {
 function formatToolEvent(name: string, args: Record<string, unknown>): string {
   switch (name) {
     case 'web_search':
-      return `Searching ${args.provider ?? 'brave'}: "${args.query ?? ''}"`;
+      return `Searching ${args.provider ?? 'web'}: "${args.query ?? ''}"`;
     case 'read_page':
       return `Reading: ${args.url ?? ''}`;
     case 'note':

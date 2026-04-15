@@ -14,21 +14,21 @@ function searchBar(size: 'large' | 'compact' = 'large', turnstileSiteKey?: strin
 <input type="radio" name="tier" value="instant" checked>
 <div class="tier-card">
 <span class="tier-name">Instant</span>
-<span class="tier-desc">~30s &middot; 50 sources</span>
+<span class="tier-desc">~90s &middot; 50 sources</span>
 </div>
 </label>
 <label class="tier-option">
 <input type="radio" name="tier" value="full">
 <div class="tier-card">
 <span class="tier-name">Full</span>
-<span class="tier-desc">~30s &middot; 75+ sources</span>
+<span class="tier-desc">~3 min &middot; 75+ sources</span>
 </div>
 </label>
 <label class="tier-option">
 <input type="radio" name="tier" value="exhaustive">
 <div class="tier-card tier-featured">
 <span class="tier-name">Deep Dive</span>
-<span class="tier-desc">~5min &middot; 400+ sources</span>
+<span class="tier-desc">~7 min &middot; 400+ sources</span>
 <span class="tier-limit">5 free/day</span>
 </div>
 </label>
@@ -37,6 +37,24 @@ function searchBar(size: 'large' | 'compact' = 'large', turnstileSiteKey?: strin
   const turnstileToggle = (size === 'large' && turnstileSiteKey)
     ? `<script>document.querySelectorAll('input[name="tier"]').forEach(function(r){r.addEventListener('change',function(){var w=document.getElementById('turnstile-wrap');if(w)w.style.display=this.value==='exhaustive'?'':'none'})})</script>`
     : '';
+
+  const loadingScript = `<script>
+(function(){
+if(window.__loadInit)return;window.__loadInit=true;
+document.querySelectorAll('form.search-form').forEach(function(f){
+f.addEventListener('submit',function(){
+var tier=(f.querySelector('input[name="tier"]:checked')||{}).value||'instant';
+var wait=tier==='exhaustive'?'up to 3 minutes':(tier==='full'?'about 1 minute':'about 30 seconds');
+var o=document.createElement('div');
+o.style.cssText='position:fixed;inset:0;background:rgba(12,17,25,0.94);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:9999;color:#fff;gap:1.25rem;padding:1rem;text-align:center';
+o.innerHTML='<div class="spinner"></div><div style="font-size:1.1rem;font-weight:600">Running research\u2026</div><div style="font-size:0.95rem;color:rgba(255,255,255,0.75);max-width:440px">Takes '+wait+'. Please keep this tab open \u2014 we\u2019ll redirect you automatically when it\u2019s ready.</div>';
+document.body.appendChild(o);
+var btn=f.querySelector('button[type="submit"]');
+if(btn){btn.disabled=true;btn.textContent='Researching\u2026'}
+})
+})
+})();
+</script>`;
 
   const autocompleteScript = `<script>
 (function(){
@@ -84,6 +102,7 @@ ${tierSelector}
 ${turnstileWidget}
 ${turnstileToggle}
 ${autocompleteScript}
+${loadingScript}
 </form>`;
 }
 

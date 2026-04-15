@@ -6,176 +6,78 @@ import type { ScrapedSource } from '../types';
 const TIMEOUT_MS = 8000;
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Brave Web Search
+// Tavily Search — https://docs.tavily.com/docs/rest-api/api-reference
+// One provider, three flavors via topic + include_domains. Unlike Brave, no
+// per-second rate limit — we can fire concurrent queries.
 // ─────────────────────────────────────────────────────────────────────────────
 
-interface BraveWebResult {
-  title: string;
+interface TavilyResult {
   url: string;
-  description: string;
-  extra_snippets?: string[];
-  age?: string;
-  page_age?: string;
+  title: string;
+  content: string;
+  score?: number;
+  published_date?: string;
 }
 
-interface BraveWebResponse {
-  web?: { results?: BraveWebResult[] };
+interface TavilyResponse {
+  results?: TavilyResult[];
+  answer?: string;
 }
 
-export async function braveWeb(query: string, apiKey: string, freshness = 'py'): Promise<ScrapedSource[]> {
+export interface TavilyOpts {
+  topic?: 'general' | 'news';
+  searchDepth?: 'basic' | 'advanced';
+  includeDomains?: string[];
+  timeRange?: 'd' | 'w' | 'm' | 'y';
+  maxResults?: number;
+  sourceLabel?: string;
+}
+
+export async function tavilySearch(
+  query: string,
+  apiKey: string,
+  opts: TavilyOpts = {},
+): Promise<ScrapedSource[]> {
   try {
-    const params = new URLSearchParams({
-      q: query,
-      count: '10',
-      extra_snippets: '1',
-      freshness,
-    });
-    const response = await fetch(`https://api.search.brave.com/res/v1/web/search?${params}`, {
+    const body: Record<string, unknown> = {
+      query,
+      topic: opts.topic ?? 'general',
+      search_depth: opts.searchDepth ?? 'basic',
+      max_results: opts.maxResults ?? 10,
+    };
+    if (opts.includeDomains && opts.includeDomains.length > 0) body.include_domains = opts.includeDomains;
+    if (opts.timeRange) body.time_range = opts.timeRange;
+
+    const response = await fetch('https://api.tavily.com/search', {
+      method: 'POST',
       signal: AbortSignal.timeout(TIMEOUT_MS),
       headers: {
-        Accept: 'application/json',
-        'Accept-Encoding': 'gzip',
-        'X-Subscription-Token': apiKey,
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
       },
+      body: JSON.stringify(body),
     });
     if (!response.ok) {
-      const body = await response.text().catch(() => '');
-      console.log(`[braveWeb] HTTP ${response.status} q="${query}" body=${body.slice(0, 200)}`);
+      const text = await response.text().catch(() => '');
+      console.log(`[tavily] HTTP ${response.status} q="${query}" body=${text.slice(0, 200)}`);
       return [];
     }
-
-    const data: BraveWebResponse = await response.json();
-    const results = data?.web?.results ?? [];
-    console.log(`[braveWeb] q="${query}" freshness=${freshness} → ${results.length} results`);
-
-    return results.slice(0, 8).map((r) => ({
-      url: r.url,
-      title: r.title,
-      content: [
-        r.age ? `[${r.age}]` : '',
-        r.description,
-        ...(r.extra_snippets ?? []),
-      ].filter(Boolean).join('\n\n'),
-      source: 'web',
-    }));
-  } catch (err) {
-    console.log(`[braveWeb] ERROR q="${query}": ${err instanceof Error ? err.message : String(err)}`);
-    return [];
-  }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Brave News Search — product launches, reviews, recent releases
-// ─────────────────────────────────────────────────────────────────────────────
-
-interface BraveNewsResult {
-  title: string;
-  url: string;
-  description: string;
-  age?: string;
-  extra_snippets?: string[];
-}
-
-interface BraveNewsResponse {
-  results?: BraveNewsResult[];
-}
-
-export async function braveNews(query: string, apiKey: string): Promise<ScrapedSource[]> {
-  try {
-    const params = new URLSearchParams({
-      q: query,
-      count: '10',
-      extra_snippets: '1',
-      freshness: 'py',
-    });
-    const response = await fetch(`https://api.search.brave.com/res/v1/news/search?${params}`, {
-      signal: AbortSignal.timeout(TIMEOUT_MS),
-      headers: {
-        Accept: 'application/json',
-        'Accept-Encoding': 'gzip',
-        'X-Subscription-Token': apiKey,
-      },
-    });
-    if (!response.ok) {
-      const body = await response.text().catch(() => '');
-      console.log(`[braveNews] HTTP ${response.status} q="${query}" body=${body.slice(0, 200)}`);
-      return [];
-    }
-
-    const data: BraveNewsResponse = await response.json();
+    const data: TavilyResponse = await response.json();
     const results = data?.results ?? [];
-    console.log(`[braveNews] q="${query}" → ${results.length} results`);
+    const label = opts.sourceLabel ?? (opts.topic === 'news' ? 'news' : 'web');
+    console.log(`[tavily] q="${query}" label=${label} depth=${opts.searchDepth ?? 'basic'} → ${results.length}`);
 
-    return results.slice(0, 6).map((r) => ({
+    return results.map((r) => ({
       url: r.url,
       title: r.title,
       content: [
-        r.age ? `[${r.age}]` : '',
-        r.description,
-        ...(r.extra_snippets ?? []),
-      ].filter(Boolean).join('\n\n'),
-      source: 'news',
-    }));
-  } catch (err) {
-    console.log(`[braveNews] ERROR q="${query}": ${err instanceof Error ? err.message : String(err)}`);
-    return [];
-  }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Brave Video Search — YouTube reviews are product research gold
-// ─────────────────────────────────────────────────────────────────────────────
-
-interface BraveVideoResult {
-  title: string;
-  url: string;
-  description?: string;
-  age?: string;
-  video?: { creator?: string; duration?: string };
-}
-
-interface BraveVideoResponse {
-  results?: BraveVideoResult[];
-}
-
-export async function braveVideos(query: string, apiKey: string): Promise<ScrapedSource[]> {
-  try {
-    const params = new URLSearchParams({
-      q: query,
-      count: '10',
-      freshness: 'py',
-    });
-    const response = await fetch(`https://api.search.brave.com/res/v1/videos/search?${params}`, {
-      signal: AbortSignal.timeout(TIMEOUT_MS),
-      headers: {
-        Accept: 'application/json',
-        'Accept-Encoding': 'gzip',
-        'X-Subscription-Token': apiKey,
-      },
-    });
-    if (!response.ok) {
-      const body = await response.text().catch(() => '');
-      console.log(`[braveVideos] HTTP ${response.status} q="${query}" body=${body.slice(0, 200)}`);
-      return [];
-    }
-
-    const data: BraveVideoResponse = await response.json();
-    const results = data?.results ?? [];
-    console.log(`[braveVideos] q="${query}" → ${results.length} results`);
-
-    return results.slice(0, 6).map((r) => ({
-      url: r.url,
-      title: r.title,
-      content: [
-        r.age ? `[${r.age}]` : '',
-        r.video?.creator ? `Channel: ${r.video.creator}` : '',
-        r.video?.duration ? `Duration: ${r.video.duration}` : '',
-        r.description ?? '',
+        r.published_date ? `[${r.published_date}]` : '',
+        r.content,
       ].filter(Boolean).join('\n'),
-      source: 'video',
+      source: label,
     }));
   } catch (err) {
-    console.log(`[braveVideos] ERROR q="${query}": ${err instanceof Error ? err.message : String(err)}`);
+    console.log(`[tavily] ERROR q="${query}": ${err instanceof Error ? err.message : String(err)}`);
     return [];
   }
 }
@@ -240,74 +142,4 @@ export async function hackerNews(query: string): Promise<ScrapedSource[]> {
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Orchestrator — fan out to every source in parallel
-// ─────────────────────────────────────────────────────────────────────────────
-
-// Brave free tier: 1 req/sec. Serialize calls with spacing so they don't 429.
-export const BRAVE_SPACING_MS = 1100;
 export const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
-
-export async function scrapeSearchResults(query: string, braveApiKey: string): Promise<ScrapedSource[]> {
-  // Compute current year inside the handler — module-level Date is frozen at epoch in CF Workers.
-  const currentYear = new Date().getUTCFullYear();
-
-  // Multiple query angles to get broad coverage
-  const directQuery = query;
-  const reviewQuery = `${query} review ${currentYear}`;
-  const bestQuery = `best ${query} ${currentYear}`;
-  const versusQuery = `${query} vs alternatives comparison`;
-
-  // HN runs in parallel — different provider, no shared rate limit
-  const hnPromise = hackerNews(query);
-
-  // Brave calls must be SERIAL (free tier = 1 req/sec)
-  // Order from most-likely-to-have-results to nice-to-have, so early ones
-  // always run even if a later one somehow blocks.
-  type BraveCall = { label: string; fn: () => Promise<ScrapedSource[]> };
-  const braveCalls: BraveCall[] = [
-    { label: 'web:best-pm', fn: () => braveWeb(bestQuery, braveApiKey, 'pm') }, // freshest
-    { label: 'news', fn: () => braveNews(`${query} ${currentYear}`, braveApiKey) },
-    { label: 'videos', fn: () => braveVideos(`${query} review`, braveApiKey) },
-    { label: 'web:review', fn: () => braveWeb(reviewQuery, braveApiKey) },
-    { label: 'web:direct', fn: () => braveWeb(directQuery, braveApiKey) },
-    { label: 'web:versus', fn: () => braveWeb(versusQuery, braveApiKey) },
-  ];
-
-  const sources: ScrapedSource[] = [];
-  for (let i = 0; i < braveCalls.length; i++) {
-    const call = braveCalls[i];
-    try {
-      const result = await call.fn();
-      console.log(`[scrape] ${call.label} → ${result.length}`);
-      sources.push(...result);
-    } catch (err) {
-      console.log(`[scrape] ${call.label} FAILED: ${err instanceof Error ? err.message : String(err)}`);
-    }
-    // Space out requests so Brave free tier (1 req/sec) is happy.
-    if (i < braveCalls.length - 1) await sleep(BRAVE_SPACING_MS);
-  }
-
-  // Collect HN result (started at the beginning, should be done by now)
-  try {
-    const hnResults = await hnPromise;
-    console.log(`[scrape] hn → ${hnResults.length}`);
-    sources.push(...hnResults);
-  } catch (err) {
-    console.log(`[scrape] hn FAILED: ${err instanceof Error ? err.message : String(err)}`);
-  }
-
-  // Deduplicate by URL
-  const seen = new Set<string>();
-  const deduped = sources.filter((s) => {
-    if (seen.has(s.url)) return false;
-    seen.add(s.url);
-    return true;
-  });
-  const counts = deduped.reduce<Record<string, number>>((acc, s) => {
-    acc[s.source] = (acc[s.source] ?? 0) + 1;
-    return acc;
-  }, {});
-  console.log(`[scrape] deduped total=${deduped.length} by-type=${JSON.stringify(counts)}`);
-  return deduped;
-}

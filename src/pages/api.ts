@@ -99,11 +99,11 @@ export async function handleResearchPost(request: Request, env: Env, ctx: Execut
     } catch {
       return json({ error: 'Failed to create research. Please try again.' }, 500);
     }
-    ctx.waitUntil(executeResearch(env, researchId, query, tier));
+    await executeResearch(env, researchId, query, tier);
     return json({ slug: slug2 }, 201);
   }
 
-  ctx.waitUntil(executeResearch(env, researchId, query, tier));
+  await executeResearch(env, researchId, query, tier);
   return json({ slug }, 201);
 }
 
@@ -123,7 +123,7 @@ async function generatePreview(env: Env, researchId: string, query: string): Pro
         'X-Title': 'Chrisputer Labs',
       },
       body: JSON.stringify({
-        model: 'google/gemini-2.5-flash',
+        model: 'anthropic/claude-haiku-4.5',
         messages: [
           {
             role: 'system',
@@ -154,7 +154,7 @@ async function executeResearch(env: Env, researchId: string, query: string, tier
       query,
       config,
       env.OPENROUTER_API_KEY,
-      env.BRAVE_API_KEY,
+      env.TAVILY_API_KEY,
       env.DB,
       researchId,
     );
