@@ -274,6 +274,7 @@ async function handleRequest(request: Request, env: Env, ctx: ExecutionContext):
         const fromQuery = url.searchParams.get('from');
         const cacheKey = `page:${CACHE_VERSION}:${slug}`;
         const cacheMetaKey = `page:${CACHE_VERSION}:${slug}:lm`;
+        const ifModifiedSince = request.headers.get('If-Modified-Since');
         if (!fromQuery) {
           const [cached, cachedLm] = await Promise.all([
             env.CACHE.get(cacheKey),
@@ -281,6 +282,8 @@ async function handleRequest(request: Request, env: Env, ctx: ExecutionContext):
           ]);
           if (cached) {
             const lm = cachedLm ? parseInt(cachedLm, 10) || undefined : undefined;
+            const notModified = maybe304(ifModifiedSince, lm);
+            if (notModified) return notModified;
             return htmlResponse(cached, 200, at, adPub, lm);
           }
         }
@@ -318,6 +321,8 @@ ${searchBar('compact')}
           ctx.waitUntil(env.CACHE.put(cacheKey, result.html, { expirationTtl: 3600 }));
           ctx.waitUntil(env.CACHE.put(cacheMetaKey, String(result.lastModified), { expirationTtl: 3600 }));
         }
+        const notModified = maybe304(ifModifiedSince, result.lastModified);
+        if (notModified) return notModified;
         return htmlResponse(result.html, 200, at, adPub, result.lastModified);
       }
 
@@ -655,6 +660,23 @@ function isScannerProbe(path: string): boolean {
     if (path.startsWith(p)) return true;
   }
   return false;
+}
+
+// Returns a 304 Not Modified if the client's If-Modified-Since covers the
+// resource's last-modified timestamp. Caller is still responsible for caching
+// the payload alongside (so the next cold request doesn't re-render).
+function maybe304(ifModifiedSince: string | null, lastModifiedSec: number | undefined): Response | null {
+  if (!ifModifiedSince || !lastModifiedSec) return null;
+  const since = Date.parse(ifModifiedSince);
+  if (isNaN(since)) return null;
+  if (Math.floor(since / 1000) < lastModifiedSec) return null;
+  return new Response(null, {
+    status: 304,
+    headers: {
+      'Last-Modified': new Date(lastModifiedSec * 1000).toUTCString(),
+      'Cache-Control': 'public, max-age=300, s-maxage=3600, stale-while-revalidate=86400',
+    },
+  });
 }
 
 function htmlResponse(body: string, status = 200, analyticsToken?: string, adsensePublisherId?: string, lastModifiedSec?: number): Response {
