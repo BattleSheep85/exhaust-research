@@ -573,7 +573,7 @@ async function generateSitemap(origin: string, env: Env, ifModifiedSince: string
 
   const entries = results.map((r) => {
     const date = new Date(r.lastmod * 1000).toISOString().split('T')[0];
-    return `<url><loc>${origin}/research/${r.slug}</loc><lastmod>${date}</lastmod><changefreq>monthly</changefreq></url>`;
+    return `<url><loc>${origin}/research/${r.slug}</loc><lastmod>${date}</lastmod><changefreq>monthly</changefreq><priority>0.6</priority></url>`;
   }).join('\n');
 
   // Home and /research are dynamic indexes — their lastmod is the newest

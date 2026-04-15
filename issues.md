@@ -1,6 +1,8 @@
 # Issues
 
-Last updated: 2026-04-15 (keep-improving R99)
+Last updated: 2026-04-15 (keep-improving R100)
+
+- [x] LOW: Individual research pages in `/sitemap.xml` emitted `<loc><lastmod><changefreq>` but no `<priority>` (`src/worker.ts`) — home (1.0), browse (0.8), and about (0.3) all had priority set, but the 28+ research detail entries were unweighted. Google uses priority as a hint for crawl scheduling (relative, not absolute) — with no value, research pages default to 0.5 which equates them with the about page. Set to 0.6 so they sit above about (0.3) but below the dynamic index pages (home 1.0, browse 0.8), reflecting that they're leaf content important enough to recrawl but less so than the indexes that surface them. Verified live. Resolved R100.
 
 - [x] LOW: Every page was missing `<meta property="og:locale" content="en_US">` (`src/lib/html.ts`). Facebook's Open Graph spec lists `og:locale` as recommended, and LinkedIn uses it for locale-aware preview rendering and to decide whether to translate the snippet. Without it, share parsers fall back to guessing from the HTML `lang` attribute or geo — imperfect. Added `en_US` in the shared layout so every page (home, browse, research, about, 404, errors) emits it. Bumped CACHE_VERSION v38 → v39 to flush cached HTML blobs. Verified live on home, research result, and /about via no-cache fetch. Resolved R99.
 
