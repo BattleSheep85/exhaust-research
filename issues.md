@@ -1,6 +1,8 @@
 # Issues
 
-Last updated: 2026-04-14 (keep-improving R97)
+Last updated: 2026-04-14 (keep-improving R98)
+
+- [x] LOW: `/humans.txt` and `/browserconfig.xml` returned the 20KB HTML 404 page (`src/worker.ts`). Browsers, scanners, and link checkers probe both convention paths — humans.txt is a web tradition (credits/tech stack), browserconfig.xml is the legacy Windows Start Menu tile config. Served small real bodies instead: humans.txt credits Chris + lists the stack; browserconfig.xml points the 150×150 tile to favicon.svg with theme color #2563eb. Cheaper responses (~200 bytes vs 20KB), friendlier to drive-by requests, and one small branding surface. Resolved R98.
 
 - [x] MED: Home (`/`) and browse (`/research`) had no `Last-Modified` / `If-Modified-Since` support (`src/worker.ts`). Every Googlebot / Bingbot / returning-user revisit re-transferred the full ~35KB HTML. Added `getLatestResearchLastmod()` helper (single `SELECT MAX(completed_at)` with the same filters as sitemap/feed) running in parallel with the KV cache lookup, wired through `maybe304`. Kept the 60s/60s cache-control (home/browse need to reflect new research within a minute — not the research-result page's 300s/3600s). Extended both `maybe304` and `htmlResponse` with an optional `cacheControl` param so callers can opt out of the aggressive research-result default when freshness matters. Verified: home and /research return `HTTP/2 304` on IMS > lastmod, with `cache-control: max-age=60, s-maxage=60, stale-while-revalidate=3600`. Resolved R97.
 

@@ -167,6 +167,24 @@ async function handleRequest(request: Request, env: Env, ctx: ExecutionContext):
         });
       }
 
+      // Convention paths that browsers, scanners, and link checkers probe.
+      // Returning tiny real bodies is kinder than the 20KB HTML 404.
+      if (path === '/humans.txt') {
+        const body = `/* TEAM */\nChris\nTitle: Creator\nSite: https://chrisputer.tech/about\n\n/* SITE */\nLanguage: English\nDoctype: HTML5\nBuilt on: Cloudflare Workers, D1, OpenRouter\nBuilt with: Pure TypeScript, zero npm dependencies\n`;
+        return new Response(body, {
+          headers: { 'Content-Type': 'text/plain;charset=utf-8', 'Cache-Control': 'public, max-age=86400' },
+        });
+      }
+
+      // IE11 / legacy Edge Start Menu tile config. Kept minimal — the tile is a
+      // deprecated surface but browsers still probe the path.
+      if (path === '/browserconfig.xml') {
+        const body = `<?xml version="1.0" encoding="utf-8"?>\n<browserconfig><msapplication><tile><square150x150logo src="/favicon.svg"/><TileColor>#2563eb</TileColor></tile></msapplication></browserconfig>`;
+        return new Response(body, {
+          headers: { 'Content-Type': 'application/xml', 'Cache-Control': 'public, max-age=86400' },
+        });
+      }
+
       if (path === '/ads.txt') {
         const pubId = env.ADSENSE_PUBLISHER_ID;
         const body = pubId
