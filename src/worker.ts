@@ -11,7 +11,7 @@ import { getTierConfig, isValidTier } from './lib/research-config';
 // Bump when the page template/schema shape changes in a way that should
 // invalidate every cached HTML blob. Old keys age out on their own TTL
 // (home: 5m, research result: 1h) so bumping is a soft cutover, not a purge.
-const CACHE_VERSION = 'v34';
+const CACHE_VERSION = 'v35';
 
 // Update when /about page content materially changes. Signals freshness to
 // crawlers so the page gets re-crawled after structured-data or copy edits.
@@ -111,6 +111,25 @@ async function handleRequest(request: Request, env: Env, ctx: ExecutionContext):
 
       if (path === '/og-image.svg') {
         return new Response(OG_IMAGE_SVG, { headers: { 'Content-Type': 'image/svg+xml', 'Cache-Control': 'public, max-age=86400' } });
+      }
+
+      if (path === '/opensearch.xml') {
+        const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<OpenSearchDescription xmlns="http://a9.com/-/spec/opensearch/1.1/">
+<ShortName>Chrisputer</ShortName>
+<LongName>Chrisputer Labs</LongName>
+<Description>AI-powered product research by Chrisputer Labs.</Description>
+<InputEncoding>UTF-8</InputEncoding>
+<Image width="32" height="32" type="image/svg+xml">${url.origin}/favicon.svg</Image>
+<Url type="text/html" method="get" template="${url.origin}/research?q={searchTerms}"/>
+<Url type="application/opensearchdescription+xml" rel="self" template="${url.origin}/opensearch.xml"/>
+<Query role="example" searchTerms="best mesh wifi"/>
+<Developer>Chrisputer Labs</Developer>
+<moz:SearchForm xmlns:moz="http://www.mozilla.org/2006/browser/search/">${url.origin}/research</moz:SearchForm>
+</OpenSearchDescription>`;
+        return new Response(xml, {
+          headers: { 'Content-Type': 'application/opensearchdescription+xml', 'Cache-Control': 'public, max-age=86400' },
+        });
       }
 
       if (path === '/manifest.webmanifest') {

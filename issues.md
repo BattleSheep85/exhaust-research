@@ -1,6 +1,8 @@
 # Issues
 
-Last updated: 2026-04-14 (keep-improving R87)
+Last updated: 2026-04-14 (keep-improving R88)
+
+- [x] LOW: No OpenSearch descriptor (`src/worker.ts`, `src/lib/html.ts`). Chrome/Firefox/Safari look for `<link rel="search">` with `application/opensearchdescription+xml` on a page to offer in-address-bar search ("Add Chrisputer Labs as a search engine" + tab-to-search). Added `/opensearch.xml` endpoint (OpenSearch 1.1 descriptor, points search template at `/research?q={searchTerms}`, includes Mozilla SearchForm extension for Firefox) and a `<link rel="search">` tag in the shared head. Bumped CACHE_VERSION v34 → v35. Invited repeat users to research from the URL bar. Resolved R88.
 
 - [x] MED: Bot/scanner probes (`/wp-admin`, `/.env`, `/.git/config`, `/index.php`, `/xmlrpc.php`, etc.) returned the 20KB HTML 404 page (`src/worker.ts`). Vulnerability scanners hit dozens of these paths per scan — for a site that doesn't run PHP, WordPress, Git, or Java stacks, these are pure waste. Added `isScannerProbe()` fast-fail at the top of the request handler: matches file-ext patterns (`.php`, `.asp`, `.aspx`, `.jsp`, `.cgi`, `.do`, `.action`, `.cfm`, `.rb`) and prefix list (`/wp-`, `/wordpress`, `/phpmyadmin`, `/.env`, `/.git`, `/.svn`, `/.DS_Store`, `/.aws`, `/_ignition`, `/vendor/phpunit`, `/actuator`, `/cgi-bin/`, `/admin/`, `/administrator/`, `/webdav/`, `/server-status`, `/HNAP1`, `/solr/`, `/boaform/`). Returns 9-byte `text/plain` 404 with 1-hour public cache (CF edge will absorb repeated hits). Saves ~20KB per probe × typical scanner fanout = meaningful egress reduction. Resolved R87.
 
