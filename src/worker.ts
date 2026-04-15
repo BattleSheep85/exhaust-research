@@ -342,6 +342,17 @@ async function handleNewResearch(request: Request, url: URL, env: Env, ctx: Exec
   const query = url.searchParams.get('q')?.trim();
   if (!query) return Response.redirect(new URL('/', url.origin).toString(), 302);
 
+  // Bots (including well-behaved crawlers that ignore the robots.txt disallow)
+  // shouldn't trigger LLM research runs. Route them to the browse page instead —
+  // they can still index existing research without creating new side-effect
+  // entries that would pollute the sitemap/feed/home. Matches only unambiguous
+  // bot UAs; humans running headless browsers still pass through.
+  const ua = request.headers.get('User-Agent') ?? '';
+  if (isBotUserAgent(ua)) {
+    const dest = new URL(`/research?q=${encodeURIComponent(query)}`, url.origin);
+    return Response.redirect(dest.toString(), 302);
+  }
+
   const tier = url.searchParams.get('tier') ?? 'instant';
   const validTier: Tier = isValidTier(tier) ? tier : 'instant';
   const tierConfig = getTierConfig(validTier);
@@ -610,6 +621,13 @@ const SCANNER_PATH_PREFIXES: ReadonlyArray<string> = [
   '/server-status', '/HNAP1', '/solr/', '/boaform/',
 ];
 const SCANNER_PATH_EXTS = /\.(php|asp|aspx|jsp|cgi|do|action|cfm|rb)$/i;
+
+const BOT_UA_PATTERN = /\b(googlebot|bingbot|yandex|baiduspider|duckduckbot|applebot|facebookexternalhit|facebookbot|twitterbot|linkedinbot|slackbot|discordbot|whatsapp|telegrambot|pinterest|redditbot|msnbot|petalbot|semrushbot|ahrefsbot|mj12bot|dotbot|seznambot|screaming\s*frog|bytespider|claudebot|gptbot|ccbot|anthropic-ai|cohere-ai|perplexitybot|crawler|spider)\b/i;
+
+function isBotUserAgent(ua: string): boolean {
+  if (!ua) return true;
+  return BOT_UA_PATTERN.test(ua);
+}
 
 function isScannerProbe(path: string): boolean {
   if (SCANNER_PATH_EXTS.test(path)) return true;

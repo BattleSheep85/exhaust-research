@@ -1,6 +1,10 @@
 # Issues
 
-Last updated: 2026-04-14 (keep-improving R88)
+Last updated: 2026-04-14 (keep-improving R89)
+
+- [x] HIGH: `/research/new?q=...` violated HTTP GET semantics — a GET from Googlebot (or any crawler that ignores robots.txt Disallow) created a new research entry with a real LLM run and published slug (`src/worker.ts`). Verified: a Googlebot-UA curl to `/research/new?q=verify+r89` created `test-r89-c8e43689` (and historically `test-gizmo-xyzqq-07a60134` leaked the same way). Polluted the sitemap/feed/home and burned OpenRouter tokens per scanner hit. Fixed by detecting bot UAs (`googlebot|bingbot|yandex|baiduspider|duckduckbot|applebot|facebookexternalhit|twitterbot|linkedinbot|slackbot|discordbot|whatsapp|telegrambot|pinterest|redditbot|msnbot|petalbot|semrushbot|ahrefsbot|mj12bot|dotbot|seznambot|screaming frog|bytespider|claudebot|gptbot|ccbot|anthropic-ai|cohere-ai|perplexitybot|crawler|spider`) and redirecting them to `/research?q=…` (existing browse) instead of triggering a run. Empty UA also treated as bot. Verified: Googlebot-UA now 302s to `/research?q=...`; legit Chrome/Firefox/Safari/iPhone UAs pass through. Resolved R89.
+
+- [ ] LOW: Test entry `test-r89-c8e43689` was inadvertently created during R89 Googlebot-UA probing (the fix itself demonstrated the bug — the redirect happens before research creation, but the probe ran before the fix was deployed). Plus `test-gizmo-xyzqq-07a60134` still pending deletion. Chris to clean both via `wrangler d1 execute exhaust-research-db --remote --command "DELETE FROM research WHERE slug IN ('test-gizmo-xyzqq-07a60134','test-r89-c8e43689')"` — data deletion needs owner approval (Scope Guards).
 
 - [x] LOW: No OpenSearch descriptor (`src/worker.ts`, `src/lib/html.ts`). Chrome/Firefox/Safari look for `<link rel="search">` with `application/opensearchdescription+xml` on a page to offer in-address-bar search ("Add Chrisputer Labs as a search engine" + tab-to-search). Added `/opensearch.xml` endpoint (OpenSearch 1.1 descriptor, points search template at `/research?q={searchTerms}`, includes Mozilla SearchForm extension for Firefox) and a `<link rel="search">` tag in the shared head. Bumped CACHE_VERSION v34 → v35. Invited repeat users to research from the URL bar. Resolved R88.
 
@@ -20,7 +24,7 @@ Last updated: 2026-04-14 (keep-improving R88)
 
 - [x] MED: `/about` page lacked both an HTML breadcrumb nav and BreadcrumbList JSON-LD (`src/pages/about.ts`) — `/research` and `/research/<slug>` both have them. UX inconsistency (no Home → About trail) and missing schema (Google uses BreadcrumbList for SERP breadcrumb display). Added both. Resolved R80.
 
-- [ ] LOW: A test research entry (`test-gizmo-xyzqq-07a60134`) was inadvertently created during R76 probing of `/research/new`. It passes the LENGTH/space/has-products quality filter so it's leaking into the sitemap, Atom feed, and home page. Single-row data cleanup task — not appropriate to do via autonomous loop without explicit approval (Scope Guards: DB schema/data changes). Leaving for Chris to delete via `wrangler d1 execute exhaust-research-db --remote --command "DELETE FROM research WHERE slug='test-gizmo-xyzqq-07a60134'"`.
+- [x] LOW: Test research entry cleanup consolidated in the R89 entry above — both `test-gizmo-xyzqq-07a60134` and `test-r89-c8e43689` listed there. Original R76 leak root-cause fix landed in R89 (bot-UA redirect on `/research/new`), so the class of "probe-triggered test entries" won't recur.
 
 - [x] LOW: Atom feed (`/feed.xml`) was missing several RFC 4287 recommended elements (`src/worker.ts`): per-entry `<author>` (readers like Inoreader/Feedly attribute "Unknown author" without it), feed-level `<icon>`/`<logo>`, `<rights>`, and `<generator>`. Added all five. Verified live. Resolved R79.
 
