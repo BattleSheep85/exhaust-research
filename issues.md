@@ -1,6 +1,8 @@
 # Issues
 
-Last updated: 2026-04-14 (keep-improving R93)
+Last updated: 2026-04-14 (keep-improving R94)
+
+- [x] LOW: Research pages had no hint to the browser that Amazon is the next-most-likely navigation target (`src/pages/research-result.ts`). Every product card carries an Amazon affiliate buy-link, but when a user clicks "Buy on Amazon" the browser has to cold-start the DNS lookup + TLS handshake (~100-300ms). Added `<link rel="dns-prefetch" href="//www.amazon.com">` on research-result pages that have products — dns-prefetch is cheaper than preconnect (no TLS, just DNS) so it's polite to the shared browser/OS DNS cache while still shaving the DNS portion of first-click latency. Gated by `products.length > 0` so thin/failed/processing pages don't emit the hint. Bumped CACHE_VERSION v37 → v38. Verified live. Resolved R94.
 
 - [x] LOW: `/manifest.json` and `/site.webmanifest` returned the 20KB HTML 404 page (`src/worker.ts`). The canonical web app manifest lives at `/manifest.webmanifest`, but older Android/Chrome tooling, link checkers, and some legacy browsers probe `/manifest.json` or `/site.webmanifest` first. Each hit burned ~20KB for no reason. Mirrored the favicon.ico/apple-touch-icon fix (R75): 301 redirect to `/manifest.webmanifest` with 30-day immutable cache. Verified both live. Resolved R93.
 

@@ -609,6 +609,9 @@ document.addEventListener('DOMContentLoaded',function(){
   // Keep thin (zero-product) and failed pages out of the index. Direct links still work.
   const isThin = entry.status === 'complete' && products.length === 0;
   const noindex = (isThin || isFailed || isProcessing) ? '<meta name="robots" content="noindex, follow">' : '';
-  const htmlOut = layout(displayTitle, entry.summary ?? 'AI-powered product research', body, canonical + noindex + structuredData + turnstileScript + extra, layoutMeta);
+  // Every product carries an Amazon buy-link. dns-prefetch is cheap (DNS-only,
+  // no TLS handshake) and shaves ~50-200ms off the first affiliate click.
+  const amazonHint = products.length > 0 ? '<link rel="dns-prefetch" href="//www.amazon.com">' : '';
+  const htmlOut = layout(displayTitle, entry.summary ?? 'AI-powered product research', body, canonical + amazonHint + noindex + structuredData + turnstileScript + extra, layoutMeta);
   return { html: htmlOut, lastModified: lastModifiedTs };
 }
