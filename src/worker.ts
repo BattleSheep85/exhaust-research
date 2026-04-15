@@ -3,7 +3,8 @@ import { renderHome, searchBar } from './pages/home';
 import { renderResearchResult } from './pages/research-result';
 import { renderBrowse } from './pages/research-browse';
 import { renderAbout } from './pages/about';
-import { handleResearchPost, handleResearchEvents, handleSearchSuggest, handleSubscribe, verifyTurnstile } from './pages/api';
+import { handleResearchPost, handleResearchEvents, handleSearchSuggest, handleSubscribe, verifyTurnstile, executeResearch } from './pages/api';
+import type { ResearchJobMessage } from './types';
 import { escapeHtml, displayQuery } from './lib/utils';
 import { layout } from './lib/html';
 import { getTierConfig, isValidTier } from './lib/research-config';
@@ -51,6 +52,18 @@ export default {
       return new Response(null, { status: response.status, headers: response.headers });
     }
     return response;
+  },
+  async queue(batch: MessageBatch<ResearchJobMessage>, env: Env): Promise<void> {
+    for (const msg of batch.messages) {
+      const { researchId, query, tier } = msg.body;
+      try {
+        await executeResearch(env, researchId, query, tier);
+        msg.ack();
+      } catch (err) {
+        console.error('[queue] research job failed:', researchId, err);
+        msg.retry();
+      }
+    }
   },
 } satisfies ExportedHandler<Env>;
 

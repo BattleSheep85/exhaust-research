@@ -18,6 +18,20 @@
 			"database_id": "27f94ec5-05e4-4064-9de8-a29f5a15417d"
 		}
 	],
+	"queues": {
+		"producers": [
+			{ "queue": "research-jobs", "binding": "RESEARCH_QUEUE" }
+		],
+		"consumers": [
+			{
+				"queue": "research-jobs",
+				"max_batch_size": 1,
+				"max_batch_timeout": 5,
+				"max_retries": 1,
+				"dead_letter_queue": "research-jobs-dlq"
+			}
+		]
+	},
 	"routes": [
 		{ "pattern": "chrisputer.tech/*", "zone_name": "chrisputer.tech" },
 		{ "pattern": "www.chrisputer.tech/*", "zone_name": "chrisputer.tech" },

@@ -1,6 +1,7 @@
 export interface Env {
   DB: D1Database;
   CACHE: KVNamespace;
+  RESEARCH_QUEUE: Queue<ResearchJobMessage>;
   OPENROUTER_API_KEY: string;
   TAVILY_API_KEY: string;
   AMAZON_AFFILIATE_TAG: string;
@@ -9,6 +10,12 @@ export interface Env {
   CF_ANALYTICS_TOKEN?: string;
   WALMART_IMPACT_ID?: string;
   ADSENSE_PUBLISHER_ID?: string;
+}
+
+export interface ResearchJobMessage {
+  researchId: string;
+  query: string;
+  tier: Tier;
 }
 
 export const DEFAULT_AFFILIATE_TAG = 'battlesheep0a-20';

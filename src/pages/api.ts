@@ -88,22 +88,22 @@ export async function handleResearchPost(request: Request, env: Env, ctx: Execut
   try {
     await env.DB.prepare(
       'INSERT INTO research (id, slug, query, status, tier, canonical_query, created_at, view_count) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, 0)'
-    ).bind(researchId, slug, query, 'processing', tier, canonical, now).run();
+    ).bind(researchId, slug, query, 'pending', tier, canonical, now).run();
   } catch {
     // Slug collision — retry with fresh slug
     const slug2 = generateSlug(query);
     try {
       await env.DB.prepare(
         'INSERT INTO research (id, slug, query, status, tier, canonical_query, created_at, view_count) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, 0)'
-      ).bind(researchId, slug2, query, 'processing', tier, canonical, now).run();
+      ).bind(researchId, slug2, query, 'pending', tier, canonical, now).run();
     } catch {
       return json({ error: 'Failed to create research. Please try again.' }, 500);
     }
-    await executeResearch(env, researchId, query, tier);
+    await env.RESEARCH_QUEUE.send({ researchId, query, tier });
     return json({ slug: slug2 }, 201);
   }
 
-  await executeResearch(env, researchId, query, tier);
+  await env.RESEARCH_QUEUE.send({ researchId, query, tier });
   return json({ slug }, 201);
 }
 
@@ -143,8 +143,10 @@ async function generatePreview(env: Env, researchId: string, query: string): Pro
   }
 }
 
-async function executeResearch(env: Env, researchId: string, query: string, tier: Tier): Promise<void> {
+export async function executeResearch(env: Env, researchId: string, query: string, tier: Tier): Promise<void> {
   const config = getTierConfig(tier);
+
+  await env.DB.prepare("UPDATE research SET status = 'processing' WHERE id = ?1").bind(researchId).run();
 
   // Kick off quick-answer preview in parallel with the full research.
   const previewPromise = generatePreview(env, researchId, query);

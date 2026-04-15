@@ -25,6 +25,16 @@
       "context": "Cloudflare Workers, long-running background work, src/pages/api.ts-style endpoints",
       "discovered": "2026-04-15",
       "severity": "CRITICAL"
+    },
+    {
+      "id": "fetch-handler-cancelled-on-client-disconnect",
+      "bad_pattern": "await longJob() inside a fetch handler for work the user may not wait for (tab close, network drop, curl --max-time shorter than job, upstream CF gateway 502)",
+      "good_pattern": "Return a streaming Response (SSE / chunked body) so CF keeps the isolate alive as long as the client reads, OR enqueue to CF Queues / Durable Objects / Workflows for true fire-and-forget background work",
+      "regex": null,
+      "description": "Cloudflare cancels the fetch handler the MOMENT the client disconnects — verified in `wrangler tail --format json` as `outcome: 'canceled'` with a wallTime matching the client's abort time, not the job's expected duration. Any `await longOp()` inside the handler is killed mid-flight; D1 rows created before the await stay in 'processing' forever because the outer catch is in the killed isolate (same orphan pattern as waitUntil-30s-hard-limit). Triggers: curl --max-time shorter than job, browser tab close, mobile background switch, flaky network, or a transient 502 from an upstream CF gateway even when the client itself is still waiting. The 'switch from ctx.waitUntil to inline await' fix only works while the client stays connected for the full job duration — it doesn't address disconnects. Streaming Response bodies are the lightest idiomatic fix: the handler stays active while the client reads events, and a well-designed client can reconnect and resume. Real solutions for true background work: (a) CF Queues, (b) Durable Objects, (c) Workflows. Cleanup hygiene: add a cron that marks `status='processing' AND created_at < now - maxExpectedDuration` as failed, because orphaned rows are inevitable under this pattern.",
+      "context": "Cloudflare Workers, long-running POST handlers, any code that writes a DB row before awaiting a multi-second operation",
+      "discovered": "2026-04-15",
+      "severity": "HIGH"
     }
   ]
 }
