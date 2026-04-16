@@ -10,6 +10,19 @@ export interface Env {
   CF_ANALYTICS_TOKEN?: string;
   WALMART_IMPACT_ID?: string;
   ADSENSE_PUBLISHER_ID?: string;
+  // AdSense manual ad unit slot IDs. Created via AdSense dashboard → Ads → By ad unit.
+  // Empty string / unset = no manual slot rendered (auto ads still fire via loader script).
+  ADSENSE_SLOT_TOP?: string;
+  ADSENSE_SLOT_MID?: string;
+  ADSENSE_SLOT_BOTTOM?: string;
+  // Additional affiliate networks. All optional — raw URL is kept when absent.
+  IMPACT_TARGET_ID?: string;
+  IMPACT_BESTBUY_ID?: string;
+  IMPACT_NEWEGG_ID?: string;
+  BHPHOTO_AFFILIATE_ID?: string;
+  // Google Places API — optional. When set + facets.needs_location, agent gets a
+  // places_search tool that returns structured address/rating/hours per result.
+  GOOGLE_PLACES_API_KEY?: string;
 }
 
 export interface ResearchJobMessage {

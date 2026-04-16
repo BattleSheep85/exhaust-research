@@ -1,10 +1,26 @@
-import type { ScrapedSource, AgentState, ResearchConfig, ToolCallObj } from '../types';
+import type { ScrapedSource, AgentState, ResearchConfig, ToolCallObj, Facets } from '../types';
 import { tavilySearch, hackerNews } from './scraper';
 import { duckduckgoSearch } from './duckduckgo';
 import { rssSearch } from './rss';
 import { fetchPageContent } from './jina';
+import { placesTextSearch, placesToScrapedSources } from './places';
 
 // ─── Tool definitions (OpenAI-compatible format for OpenRouter) ──────────────
+
+const PLACES_TOOL = {
+  type: 'function' as const,
+  function: {
+    name: 'places_search',
+    description: 'Google Places Text Search — returns structured real-world business/location data with verified addresses, phone numbers, opening hours, ratings, and Maps URLs. STRONGLY preferred over web_search for any location-bound query (restaurants, shops, venues, services with a physical address). Call this FIRST when researching places, then enrich with web_search for reviews and depth.',
+    parameters: {
+      type: 'object',
+      properties: {
+        query: { type: 'string', description: 'Places text query. Include a city or region. Examples: "best italian restaurant in Austin TX", "coffee shops near Williamsburg Brooklyn".' },
+      },
+      required: ['query'],
+    },
+  },
+};
 
 export const AGENT_TOOLS = [
   {
@@ -61,14 +77,31 @@ export const AGENT_TOOLS = [
   },
 ];
 
+// Builds the tool set exposed to the agent for this research. Places tool is
+// gated: only included when we have both a Places API key AND the classifier
+// flagged the query as needs_location. That keeps the tool catalog shorter for
+// non-local queries (fewer spurious calls) and guarantees zero Places API cost
+// when the key is unset.
+export function buildAgentTools(facets?: Facets, placesApiKey?: string): typeof AGENT_TOOLS {
+  if (placesApiKey && facets?.needs_location) {
+    return [PLACES_TOOL, ...AGENT_TOOLS];
+  }
+  return AGENT_TOOLS;
+}
+
 // ─── Tool execution ──────────────────────────────────────────────────────────
+
+export interface ToolContext {
+  tavilyApiKey: string;
+  placesApiKey?: string;
+}
 
 /** Returns [resultText, subrequestsUsed] */
 export async function executeTool(
   toolCall: ToolCallObj,
   state: AgentState,
   config: ResearchConfig,
-  tavilyApiKey: string,
+  ctx: ToolContext,
 ): Promise<[string, number]> {
   const name = toolCall.function.name;
   let args: Record<string, unknown>;
@@ -80,14 +113,55 @@ export async function executeTool(
 
   switch (name) {
     case 'web_search':
-      return executeSearch(args, state, config, tavilyApiKey);
+      return executeSearch(args, state, config, ctx.tavilyApiKey);
     case 'read_page':
       return executeReadPage(args, state, config);
     case 'note':
       return [executeNote(args, state), 0];
+    case 'places_search':
+      return executePlacesSearch(args, state, config, ctx.placesApiKey);
     default:
       return [`Error: unknown tool "${name}"`, 0];
   }
+}
+
+async function executePlacesSearch(
+  args: Record<string, unknown>,
+  state: AgentState,
+  config: ResearchConfig,
+  placesApiKey?: string,
+): Promise<[string, number]> {
+  if (!placesApiKey) return ['Error: places_search is not available (no API key)', 0];
+  if (state.searchCount >= config.maxSearches) {
+    return ['Search budget exhausted. Use note() to record findings or stop.', 0];
+  }
+  const query = typeof args.query === 'string' ? args.query : '';
+  if (!query) return ['Error: query is required', 0];
+
+  state.searchCount++;
+  const places = await placesTextSearch(query, placesApiKey, 10);
+  if (places.length === 0) {
+    return [`places_search "${query}": 0 results. Fall back to web_search.`, 1];
+  }
+
+  const sources = placesToScrapedSources(places);
+  const seenUrls = new Set(state.sources.map((s) => s.url));
+  const newSources = sources.filter((s) => !s.url || !seenUrls.has(s.url));
+  state.sources.push(...newSources);
+
+  // Format for the LLM — condensed preview of each place. Full structured
+  // content is in state.sources for synthesis.
+  const preview = places.map((p, i) => {
+    const bits = [`${i + 1}. ${p.name}`];
+    if (p.address) bits.push(`   ${p.address}`);
+    if (p.rating != null) bits.push(`   ⭐ ${p.rating} (${p.ratingCount ?? '?'} reviews)${p.priceLevel ? ` · ${p.priceLevel}` : ''}`);
+    if (p.hours) bits.push(`   Hours: ${p.hours.slice(0, 120)}`);
+    if (p.phone) bits.push(`   ☎ ${p.phone}`);
+    if (p.summary) bits.push(`   "${p.summary.slice(0, 150)}"`);
+    return bits.join('\n');
+  }).join('\n\n');
+
+  return [`places_search "${query}": ${places.length} structured results:\n\n${preview}`, 1];
 }
 
 async function executeSearch(

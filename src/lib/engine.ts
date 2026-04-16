@@ -8,7 +8,7 @@ import type {
   ResearchResult,
   Facets,
 } from '../types';
-import { AGENT_TOOLS, executeTool } from './tools';
+import { AGENT_TOOLS, buildAgentTools, executeTool } from './tools';
 
 // ─── OpenRouter API types ────────────────────────────────────────────────────
 
@@ -452,7 +452,10 @@ export async function runEngine(
   researchId: string,
   facets?: Facets,
   topicalCategory?: string | null,
+  placesApiKey?: string,
 ): Promise<EngineResult> {
+  const agentTools = buildAgentTools(facets, placesApiKey);
+  const toolCtx = { tavilyApiKey, placesApiKey };
   const startTime = Date.now();
   let subrequestsUsed = 0;
   const state: AgentState = {
@@ -507,7 +510,7 @@ export async function runEngine(
     try {
       subrequestsUsed++; // LLM call = 1 subrequest
       console.log(`[engine] LLM call turn ${turn} (${subrequestsUsed} subs, ${state.toolCallCount} tools)`);
-      response = await callLLM(openrouterKey, config.plannerModel, prunedMessages, AGENT_TOOLS);
+      response = await callLLM(openrouterKey, config.plannerModel, prunedMessages, agentTools);
       console.log(`[engine] LLM call turn ${turn} returned`);
     } catch (err) {
       console.log(`[engine] LLM error turn ${turn}: ${err instanceof Error ? err.message : String(err)}`);
@@ -585,7 +588,7 @@ export async function runEngine(
       await writeEvent(db, researchId, state.eventSeq++, tc.function.name === 'note' ? 'note' : tc.function.name === 'read_page' ? 'fetch' : 'search', eventMsg, tc.function.arguments);
 
       // Execute the tool
-      const [result, subs] = await executeTool(tc, state, config, tavilyApiKey);
+      const [result, subs] = await executeTool(tc, state, config, toolCtx);
       subrequestsUsed += subs;
 
       messages.push({

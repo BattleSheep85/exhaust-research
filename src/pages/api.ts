@@ -178,6 +178,7 @@ export async function executeResearch(env: Env, researchId: string, query: strin
       researchId,
       facets,
       topicalCategory ?? null,
+      env.GOOGLE_PLACES_API_KEY,
     );
     // Don't let a hung preview block the main flow, but don't leak it either.
     previewPromise.catch(() => {});

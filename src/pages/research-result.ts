@@ -2,6 +2,7 @@ import { type Env, type ResearchRow, type ItemRow, type BuyersGuide, DEFAULT_AFF
 import { layout, html, type LayoutMeta } from '../lib/html';
 import { parseJsonSafe, isValidHttpUrl, escapeHtml, timeAgo, displayQuery } from '../lib/utils';
 import { searchBar } from './home';
+import { adSlot } from '../lib/ads';
 
 // Icons for well-known metadata keys. Unknown keys render with a generic dot so
 // new verticals render sensibly without code changes.
@@ -102,13 +103,22 @@ const BUY_HOSTS = [
   'microcenter.com',
 ];
 
-function buildAffiliateUrl(rawUrl: string, affiliateTag: string, walmartImpactId?: string): string {
+interface AffiliateIds {
+  amazonTag: string;
+  walmartImpact?: string;
+  targetImpact?: string;
+  bestbuyImpact?: string;
+  neweggImpact?: string;
+  bhphoto?: string;
+}
+
+function buildAffiliateUrl(rawUrl: string, ids: AffiliateIds): string {
   if (!rawUrl || !isValidHttpUrl(rawUrl)) return '';
   try {
     const host = new URL(rawUrl).hostname.replace(/^www\./, '');
     if (host === 'amazon.com' || host.endsWith('.amazon.com')) {
       const u = new URL(rawUrl);
-      u.searchParams.set('tag', affiliateTag);
+      u.searchParams.set('tag', ids.amazonTag);
       return u.toString();
     }
     // Amazon short links (amzn.to, a.co) can't embed our tag — fall back to search.
@@ -116,8 +126,28 @@ function buildAffiliateUrl(rawUrl: string, affiliateTag: string, walmartImpactId
     if (host === 'amzn.to' || host === 'a.co') {
       return '';
     }
-    if (walmartImpactId && (host === 'walmart.com' || host.endsWith('.walmart.com'))) {
-      return `https://goto.walmart.com/c/${encodeURIComponent(walmartImpactId)}/s/1?u=${encodeURIComponent(rawUrl)}`;
+    if (ids.walmartImpact && (host === 'walmart.com' || host.endsWith('.walmart.com'))) {
+      return `https://goto.walmart.com/c/${encodeURIComponent(ids.walmartImpact)}/s/1?u=${encodeURIComponent(rawUrl)}`;
+    }
+    // Target via Impact — same goto.<host> format as Walmart (standard Impact publisher link).
+    if (ids.targetImpact && (host === 'target.com' || host.endsWith('.target.com'))) {
+      return `https://goto.target.com/c/${encodeURIComponent(ids.targetImpact)}/s/1?u=${encodeURIComponent(rawUrl)}`;
+    }
+    // Best Buy via Impact. Uses bestbuy.7tiv.net rather than goto.* — the 7tiv
+    // subdomain is Impact's Best Buy-specific publisher-link domain.
+    if (ids.bestbuyImpact && (host === 'bestbuy.com' || host.endsWith('.bestbuy.com'))) {
+      return `https://bestbuy.7tiv.net/c/${encodeURIComponent(ids.bestbuyImpact)}/s/1?u=${encodeURIComponent(rawUrl)}`;
+    }
+    // Newegg via Impact — same goto pattern.
+    if (ids.neweggImpact && (host === 'newegg.com' || host.endsWith('.newegg.com'))) {
+      return `https://goto.newegg.com/c/${encodeURIComponent(ids.neweggImpact)}/s/1?u=${encodeURIComponent(rawUrl)}`;
+    }
+    // B&H Photo Partner Program — direct deeplink with `?BI={id}&A={id}` params.
+    // B&H's partner tool builds these URLs; format matches their documented deeplink spec.
+    if (ids.bhphoto && (host === 'bhphotovideo.com' || host.endsWith('.bhphotovideo.com'))) {
+      const u = new URL(rawUrl);
+      u.searchParams.set('BI', ids.bhphoto);
+      return u.toString();
     }
     // Known retailer (non-affiliate) — keep the URL as-is; no tag to inject.
     if (BUY_HOSTS.some((h) => host === h || host.endsWith(`.${h}`))) {
@@ -266,7 +296,7 @@ function retailerLabel(url: string): string {
   } catch { return 'Retailer'; }
 }
 
-function renderProduct(p: ItemRow, index: number, affiliateTag: string, walmartImpactId: string | undefined, isService: boolean): string {
+function renderProduct(p: ItemRow, index: number, ids: AffiliateIds, isService: boolean): string {
   const pros = parseJsonSafe<string[]>(p.pros, []);
   const cons = parseJsonSafe<string[]>(p.cons, []);
   const specs = parseJsonSafe<Record<string, string>>(p.specs, {});
@@ -298,12 +328,12 @@ function renderProduct(p: ItemRow, index: number, affiliateTag: string, walmartI
     ctaRel = 'noopener noreferrer nofollow';
     ctaIsSponsored = false;
   } else {
-    const affiliate = buildAffiliateUrl(buyRaw, affiliateTag, walmartImpactId);
+    const affiliate = buildAffiliateUrl(buyRaw, ids);
     if (affiliate) {
       ctaUrl = affiliate;
       ctaLabel = `Buy on ${retailerLabel(affiliate)}`;
     } else {
-      ctaUrl = amazonSearchUrl(p.name, p.brand, affiliateTag);
+      ctaUrl = amazonSearchUrl(p.name, p.brand, ids.amazonTag);
       ctaLabel = 'Buy on Amazon';
     }
   }
@@ -386,8 +416,14 @@ export async function renderResearchResult(slug: string, env: Env, fromQuery: st
   const lastModifiedTs = entry.completed_at ?? entry.created_at;
   const lastUpdatedLabel = new Date(lastModifiedTs * 1000).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
   const lastUpdatedIso = new Date(lastModifiedTs * 1000).toISOString().slice(0, 10);
-  const affiliateTag = env.AMAZON_AFFILIATE_TAG || DEFAULT_AFFILIATE_TAG;
-  const walmartId = env.WALMART_IMPACT_ID;
+  const affiliateIds: AffiliateIds = {
+    amazonTag: env.AMAZON_AFFILIATE_TAG || DEFAULT_AFFILIATE_TAG,
+    walmartImpact: env.WALMART_IMPACT_ID || undefined,
+    targetImpact: env.IMPACT_TARGET_ID || undefined,
+    bestbuyImpact: env.IMPACT_BESTBUY_ID || undefined,
+    neweggImpact: env.IMPACT_NEWEGG_ID || undefined,
+    bhphoto: env.BHPHOTO_AFFILIATE_ID || undefined,
+  };
   const pageUrl = `https://chrisputer.tech/research/${escapeHtml(slug)}`;
   const displayTitle = displayQuery(entry.query);
   const shareText = encodeURIComponent(displayTitle);
@@ -470,6 +506,8 @@ ${entry.status === 'complete' ? (() => {
 
 ${entry.summary ? `<div class="summary-box"><h2 id="summary">Summary</h2><p>${escapeHtml(entry.summary)}</p></div>` : ''}
 
+${entry.status === 'complete' ? adSlot(env, 'top', 'Advertisement') : ''}
+
 ${hasBuyersGuide && buyersGuide ? `<section class="buyers-guide" style="background:var(--surface);border:1px solid var(--surface2);border-radius:var(--radius);padding:1.5rem;margin-bottom:2rem">
 <h2 id="buyers-guide" style="font-size:1.1rem;font-weight:600;margin-bottom:1rem">Buyer's guide</h2>
 ${buyersGuide.howToChoose ? `<h3 style="font-size:.85rem;font-weight:600;color:var(--text);text-transform:uppercase;letter-spacing:.05em;margin-bottom:.5rem">How to choose</h3>
@@ -481,7 +519,14 @@ ${(buyersGuide.marketingToIgnore?.length ?? 0) > 0 ? `<h3 style="font-size:.85re
 </section>` : ''}
 
 ${products.length > 0 ? `<h2 id="products" style="font-size:1.25rem;font-weight:700;margin-bottom:1.5rem">${isService ? 'Recommendations' : 'Products compared'}</h2>
-<div class="product-grid">${products.map((p, i) => renderProduct(p, i, affiliateTag, walmartId, isService)).join('')}</div>` : ''}
+<div class="product-grid">${products.map((p, i) => {
+  const card = renderProduct(p, i, affiliateIds, isService);
+  // Mid-list ad after rank 3 when there are 5+ items — keeps the ad out of
+  // the above-fold view on short comparisons but catches mid-scroll engagement.
+  const midAd = (i === 2 && products.length >= 5) ? adSlot(env, 'mid', 'Advertisement') : '';
+  return card + midAd;
+}).join('')}</div>
+${adSlot(env, 'bottom', 'Advertisement')}` : ''}
 
 ${(resultData.methodology || sourceList.length > 0) ? `<div class="sources" style="margin-top:2rem">
 ${resultData.methodology ? `<h2 id="methodology" style="font-size:1.1rem;font-weight:600;margin-bottom:.5rem">Methodology</h2><p style="font-size:.85rem;color:var(--text2);margin-bottom:1rem">${escapeHtml(resultData.methodology)}</p>` : ''}
@@ -524,7 +569,7 @@ ${searchBar('compact', env.TURNSTILE_SITE_KEY)}
         price: p.price,
         priceCurrency: 'USD',
         priceValidUntil,
-        url: amazonSearchUrl(p.name, p.brand, affiliateTag),
+        url: amazonSearchUrl(p.name, p.brand, affiliateIds.amazonTag),
         seller: { '@type': 'Organization', name: 'Amazon.com' },
       };
       item.offers = offer;
