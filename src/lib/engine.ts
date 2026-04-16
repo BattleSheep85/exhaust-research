@@ -6,6 +6,7 @@ import type {
   ScrapedSource,
   ResearchConfig,
   ResearchResult,
+  Facets,
 } from '../types';
 import { AGENT_TOOLS, executeTool } from './tools';
 
@@ -26,21 +27,78 @@ interface OpenRouterResponse {
 
 // ─── Agent system prompt ─────────────────────────────────────────────────────
 
-function buildAgentPrompt(query: string, config: ResearchConfig): string {
+// Facet-specific focus blocks. Multiple facets can activate simultaneously —
+// "best pizza delivery in Austin" lights up is_buyable + needs_location +
+// is_service, and all three blocks concatenate into one prompt.
+function facetFocusBlocks(facets: Facets): string {
+  const blocks: string[] = [];
+  if (facets.is_buyable) {
+    blocks.push(
+      `BUYABLE PRODUCT focus:
+- Capture: model numbers, current price (USD), specs, release date, retailer availability.
+- Read expert reviews (Wirecutter, RTINGS, Tom's Hardware, PCMag) over listicles.
+- Note known issues, firmware bugs, recalls, or common complaints.`
+    );
+  }
+  if (facets.needs_location) {
+    blocks.push(
+      `LOCATION-AWARE focus:
+- Capture: full address, neighborhood/city, hours of operation, phone, Google Maps URL, price tier.
+- Use web search for "<name> reviews" and "<name> yelp" / "<name> tripadvisor" — cross-reference ratings.
+- If the query names a city/region, keep every candidate inside that area; drop candidates from elsewhere.`
+    );
+  }
+  if (facets.is_experience) {
+    blocks.push(
+      `EXPERIENCE/PLACE focus:
+- Capture: location, best season, cost, tips, typical crowd level, duration, difficulty if applicable.
+- Favor firsthand reports (blogs, forum threads, Reddit) over promotional content.`
+    );
+  }
+  if (facets.is_content) {
+    blocks.push(
+      `CONTENT/MEDIA focus:
+- Capture: platform/availability, creator/author, release date, content type, target audience.
+- For apps: pricing model (free/freemium/paid), platform coverage, stand-out features.
+- For media: runtime/length, genre, key themes, critical reception.`
+    );
+  }
+  if (facets.is_service) {
+    blocks.push(
+      `SERVICE/PROFESSIONAL focus:
+- Capture: service area, pricing model (hourly/fixed/subscription), credentials, response time, reviews.
+- Prefer named providers with reviews over generic aggregator listings.`
+    );
+  }
+  if (facets.is_comparative) {
+    blocks.push(
+      `COMPARATIVE focus:
+- The user named two or more specific things to compare. Research each one thoroughly.
+- Note the honest wins, losses, and ties. Reject false balance — if one clearly wins, say so.`
+    );
+  }
+  return blocks.length > 0 ? '\n\nFOCUS AREAS (multiple may apply):\n' + blocks.join('\n\n') : '';
+}
+
+function buildAgentPrompt(query: string, config: ResearchConfig, facets?: Facets): string {
   const currentYear = new Date().getUTCFullYear();
-  return `You are an autonomous product research agent. Your goal: thoroughly research "${query}" using your tools.
+  const effectiveFacets: Facets = facets ?? {
+    needs_location: false, is_buyable: true, is_experience: false,
+    is_content: false, is_service: false, is_comparative: false,
+  };
+  return `You are an autonomous research agent. Your goal: thoroughly research "${query}" using your tools.
 
 CURRENT YEAR: ${currentYear}. Prioritize recent data. Discount sources older than 18 months.
 
-BUDGET: ${config.maxSearches} searches, ${config.maxFetches} page reads, ${config.maxToolCalls} total tool calls.
+BUDGET: ${config.maxSearches} searches, ${config.maxFetches} page reads, ${config.maxToolCalls} total tool calls.${facetFocusBlocks(effectiveFacets)}
 
 STRATEGY:
 1. Start with 3-5 broad searches across different providers (web, news, video, duckduckgo, rss) to discover the landscape.
-2. Identify the top candidate products from initial results.
+2. Identify the top candidates from initial results.
 3. Search for each top candidate by name + "review" to find detailed evaluations.
-4. Use read_page on the most promising expert reviews (PCMag, Wirecutter, RTINGS, Tom's Hardware, etc.) and detailed comparison articles.
-5. Search for known issues/complaints for the top candidates.
-6. Search for price comparisons and deals.
+4. Use read_page on the most promising expert sources and detailed comparison/review articles.
+5. Search for known issues, complaints, or drawbacks for the top candidates.
+6. For buyable products: search for price comparisons and deals. For local: search for recent reviews.
 7. Call note() AGGRESSIVELY — at minimum one note per search that returned useful results, and one note per page you read. A rough target is 1 note per 3 sources gathered. Sparse notes starve the synthesis step. If a source had nothing useful, call note() anyway with the reason ("no relevant info in <source>").
 8. When you've covered all angles or used most of your budget, stop calling tools.
 
@@ -54,19 +112,36 @@ PROVIDERS:
 
 NOTES ARE CRITICAL: Call note() frequently. The synthesis step ONLY sees your notes + source list, not this conversation. If you don't note it, it won't be in the report. Under-noting is the #1 cause of weak reports — always err on the side of more notes.
 
-Be thorough. Be specific. Include model numbers, prices, specs, and source attribution in your notes.`;
+Be thorough. Be specific. Include names, prices, specs, addresses, and source attribution in your notes.`;
 }
 
 // ─── Synthesis prompt ────────────────────────────────────────────────────────
+
+function metadataKeysHint(facets: Facets): string {
+  const hints: string[] = [];
+  if (facets.is_buyable) hints.push('"modelNumber", "releaseDate", "availability"');
+  if (facets.needs_location) hints.push('"address", "hours", "phone", "mapsUrl", "priceRange"');
+  if (facets.is_experience) hints.push('"location", "season", "cost", "duration", "difficulty"');
+  if (facets.is_content) hints.push('"platform", "creator", "length", "contentType"');
+  if (facets.is_service) hints.push('"serviceArea", "pricingModel", "credentials", "responseTime"');
+  if (hints.length === 0) return '(empty object if nothing to add)';
+  return hints.join(', ') + ' as applicable, plus any other relevant key-value pairs the user would want';
+}
 
 function buildSynthesisPrompt(
   query: string,
   notes: AgentNote[],
   sources: ScrapedSource[],
   config: ResearchConfig,
+  facets?: Facets,
+  topicalCategory?: string | null,
 ): string {
   const currentYear = new Date().getUTCFullYear();
   const sections = config.reportSections;
+  const effectiveFacets: Facets = facets ?? {
+    needs_location: false, is_buyable: true, is_experience: false,
+    is_content: false, is_service: false, is_comparative: false,
+  };
 
   const notesByCategory: Record<string, string[]> = {};
   for (const note of notes) {
@@ -89,19 +164,37 @@ function buildSynthesisPrompt(
   if (sections.includes('categories')) sectionInstructions += '\n- Include "categories" array: [{name: "Best for Budget", productName, reason}, ...]';
   if (sections.includes('pitfalls')) sectionInstructions += '\n- Include "pitfalls" array of common mistakes or things to avoid';
 
-  return `You are an expert product researcher writing a comprehensive report. Analyze the research notes and sources below.
+  const metadataHint = metadataKeysHint(effectiveFacets);
+  const categoryHint = topicalCategory
+    ? `The topical category is "${topicalCategory}" — use this (or something equivalent) as the "category" field.`
+    : '';
+  const priceNote = effectiveFacets.is_buyable
+    ? '- Every item MUST have a numeric price (best USD estimate, never null).'
+    : effectiveFacets.needs_location || effectiveFacets.is_service
+      ? '- Price is optional — set null if not applicable (e.g., free attractions). For pricing tiers like "$$" put them in metadata.priceRange.'
+      : '- Price is optional — null is fine when irrelevant.';
+  const brandNote = effectiveFacets.is_buyable
+    ? '- Every item MUST have a non-empty brand.'
+    : '- Brand is optional — use an empty string when not applicable (a restaurant or hiking trail has no "brand"; leave it empty and put relevant info in metadata).';
+
+  return `You are an expert researcher writing a comprehensive report. Analyze the research notes and sources below.
 
 CURRENT YEAR: ${currentYear}.
+${categoryHint}
 
 RULES:
-- Be brutally honest. If a product has problems, say so.
-- Never recommend a product you wouldn't buy yourself.
-- Include specific model numbers, prices, and specs.
-- Rank products by overall recommendation, #1 being top pick.
-- Note release dates and availability. Avoid recommending discontinued products.
-- If data is insufficient for some products, say so.
-- COMPLETENESS IS MANDATORY. Every product object MUST have: non-empty name and brand; a numeric price (your best USD estimate, never null); a numeric rating 0-5 (inferred if not explicit); AT LEAST 3 specific pros and AT LEAST 2 specific cons (no product is flawless — if you can't name 2 honest cons it doesn't belong on the list); a verdict of 15+ words. Products missing any of these will be discarded before the user sees them.
+- Be brutally honest. If an item has problems, say so.
+- Never recommend something you wouldn't pick yourself.
+- Include specific names, identifiers (model numbers, addresses), and data points.
+- Rank items by overall recommendation, #1 being top pick.
+- Note dates and availability. Avoid recommending discontinued/closed options.
+- If data is insufficient for some items, say so.
+${priceNote}
+${brandNote}
+- COMPLETENESS IS MANDATORY. Every item object MUST have: non-empty name; a numeric rating 0-5 (inferred if not explicit); AT LEAST 3 specific pros and AT LEAST 2 specific cons (nothing is flawless — if you can't name 2 honest cons it doesn't belong on the list); a verdict of 15+ words. Items missing any of these will be discarded before the user sees them.
 - THE "buyersGuide" OBJECT IS REQUIRED AND NON-NEGOTIABLE. Every response MUST include a populated buyersGuide with: a 3-5 sentence "howToChoose" string, at least 3 concrete "pitfalls" strings, and at least 3 concrete "marketingToIgnore" strings. Do NOT omit this field. Do NOT return empty arrays. Output the buyersGuide BEFORE products in the JSON so it is never truncated. Responses missing buyersGuide will be rejected and regenerated.
+- imageUrl: extract the single best representative image URL from your sources (product photo, restaurant exterior, app screenshot, trail photo). Must be a full https:// URL from your research sources. Empty string if nothing usable was found — DO NOT invent URLs.
+- metadata: a flat object of string key/value pairs relevant to this item. Suggested keys for this query: ${metadataHint}. Keep values concise (under 120 chars each). Omit keys with no real data.
 
 RESEARCH NOTES:
 ${notesText || '(No structured notes — work from source data)'}
@@ -112,23 +205,25 @@ ${sourceText}
 OUTPUT: Valid JSON matching this schema:
 {
   "summary": "2-4 sentence overview of findings",
-  "category": "product category",
+  "category": "category label",
   "buyersGuide": {
-    "howToChoose": "3-5 sentences on what ACTUALLY matters when picking in this category — the decision framework a savvy buyer uses. Be specific to the category, not generic. e.g. for NAS: bay count, CPU tier for transcoding, ECC RAM, drive compatibility list.",
-    "pitfalls": ["At least 3 specific pitfalls shoppers fall into in this category — each 1-2 sentences, concrete not generic."],
-    "marketingToIgnore": ["At least 3 marketing claims/spec-sheet traps that don't matter in practice for this category — each 1-2 sentences, with the WHY."]
+    "howToChoose": "3-5 sentences on what ACTUALLY matters when picking in this category — the decision framework a savvy buyer uses. Be specific to the category, not generic. e.g. for NAS: bay count, CPU tier for transcoding, ECC RAM, drive compatibility list. For restaurants: cuisine authenticity, service, noise level, parking. For hiking: trail difficulty rating systems, seasonal access, permits.",
+    "pitfalls": ["At least 3 specific pitfalls people fall into in this category — each 1-2 sentences, concrete not generic."],
+    "marketingToIgnore": ["At least 3 claims/spec-sheet traps that don't matter in practice for this category — each 1-2 sentences, with the WHY."]
   },
   "products": [
     {
-      "name": "Full product name with model number",
-      "brand": "Brand",
+      "name": "Full name (include model number, location, or other identifier)",
+      "brand": "Brand/chain/operator — empty string if not applicable",
       "price": 299.99,
       "rating": 4.5,
-      "productUrl": "Amazon.com or retailer product page URL for buying. Empty string if unknown.",
-      "manufacturerUrl": "Official manufacturer product page URL (e.g. anker.com/products/...). Empty string if unknown.",
-      "pros": ["Specific pro 1", "Specific pro 2"],
+      "productUrl": "Retailer/reservation/booking/official URL. Empty string if unknown.",
+      "manufacturerUrl": "Official home URL (manufacturer for products, restaurant's own website, service provider's site). Empty string if unknown.",
+      "imageUrl": "Single https:// image URL extracted from your sources. Empty string if none found.",
+      "pros": ["Specific pro 1", "Specific pro 2", "Specific pro 3"],
       "cons": ["Specific con 1", "Specific con 2"],
       "specs": {"key": "value"},
+      "metadata": {"key": "value"},
       "verdict": "2-3 sentence honest verdict",
       "rank": 1,
       "bestFor": "who this is best for"
@@ -355,6 +450,8 @@ export async function runEngine(
   tavilyApiKey: string,
   db: D1Database,
   researchId: string,
+  facets?: Facets,
+  topicalCategory?: string | null,
 ): Promise<EngineResult> {
   const startTime = Date.now();
   let subrequestsUsed = 0;
@@ -372,7 +469,7 @@ export async function runEngine(
   // ── Phase 1: Agent loop (tool use) ──────────────────────────────────────
 
   const messages: ChatMessage[] = [
-    { role: 'system', content: buildAgentPrompt(query, config) },
+    { role: 'system', content: buildAgentPrompt(query, config, facets) },
     { role: 'user', content: `Research this thoroughly: "${query}"` },
   ];
 
@@ -506,7 +603,7 @@ export async function runEngine(
 
   await writeEvent(db, researchId, state.eventSeq++, 'synthesize', 'Writing final report...');
 
-  const synthPrompt = buildSynthesisPrompt(query, state.notes, state.sources, config);
+  const synthPrompt = buildSynthesisPrompt(query, state.notes, state.sources, config, facets, topicalCategory);
 
   // Stream the synthesis so we can surface progress beats (product names as they
   // appear in the JSON) instead of a 6s black-box wait. Falls back to non-streaming
@@ -628,7 +725,29 @@ function formatToolEvent(name: string, args: Record<string, unknown>): string {
 
 // ─── Validation (shared with old researcher.ts) ──────────────────────────────
 
-import type { ProductResult } from '../types';
+import type { ItemResult } from '../types';
+
+function sanitizeImageUrl(val: unknown): string {
+  if (typeof val !== 'string') return '';
+  const trimmed = val.trim();
+  if (!trimmed) return '';
+  if (!/^https:\/\//i.test(trimmed)) return '';
+  if (trimmed.length > 2000) return '';
+  return trimmed;
+}
+
+function sanitizeMetadata(val: unknown): Record<string, string> {
+  if (!val || typeof val !== 'object' || Array.isArray(val)) return {};
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(val as Record<string, unknown>)) {
+    if (typeof k !== 'string') continue;
+    if (typeof v !== 'string') continue;
+    const key = k.trim().slice(0, 40);
+    const value = v.trim().slice(0, 240);
+    if (key && value) out[key] = value;
+  }
+  return out;
+}
 
 function validateResearchResult(data: unknown): ResearchResult {
   if (!data || typeof data !== 'object') throw new Error('Response is not an object');
@@ -641,32 +760,35 @@ function validateResearchResult(data: unknown): ResearchResult {
   if (!summary) throw new Error('Missing summary in response');
 
   const rawProducts = Array.isArray(obj.products) ? obj.products : [];
-  const products: ProductResult[] = rawProducts.slice(0, 20).map((p: unknown, i: number) => {
-    // Drop products the LLM left under-specified — honest cards need pros AND cons.
+  const products: ItemResult[] = rawProducts.slice(0, 20).map((p: unknown, i: number) => {
+    // Drop items the LLM left under-specified — honest cards need pros AND cons.
     if (!p || typeof p !== 'object') {
-      return { name: `Product ${i + 1}`, brand: '', price: null, rating: null, productUrl: '', manufacturerUrl: '', pros: [], cons: [], specs: {}, verdict: '', rank: i + 1, bestFor: '' };
+      return { name: `Item ${i + 1}`, brand: '', price: null, rating: null, productUrl: '', manufacturerUrl: '', imageUrl: '', pros: [], cons: [], specs: {}, metadata: {}, verdict: '', rank: i + 1, bestFor: '' };
     }
     const prod = p as Record<string, unknown>;
     return {
-      name: typeof prod.name === 'string' && prod.name ? prod.name : `Product ${i + 1}`,
+      name: typeof prod.name === 'string' && prod.name ? prod.name : `Item ${i + 1}`,
       brand: typeof prod.brand === 'string' ? prod.brand : '',
       price: typeof prod.price === 'number' ? prod.price : null,
       rating: typeof prod.rating === 'number' && prod.rating >= 0 && prod.rating <= 5 ? prod.rating : null,
       productUrl: typeof prod.productUrl === 'string' ? prod.productUrl : '',
       manufacturerUrl: typeof prod.manufacturerUrl === 'string' ? prod.manufacturerUrl : '',
+      imageUrl: sanitizeImageUrl(prod.imageUrl),
       pros: Array.isArray(prod.pros) ? prod.pros.filter((x: unknown) => typeof x === 'string') : [],
       cons: Array.isArray(prod.cons) ? prod.cons.filter((x: unknown) => typeof x === 'string') : [],
       specs: isStringRecord(prod.specs) ? prod.specs : {},
+      metadata: sanitizeMetadata(prod.metadata),
       verdict: typeof prod.verdict === 'string' ? prod.verdict : '',
       rank: typeof prod.rank === 'number' ? prod.rank : i + 1,
       bestFor: typeof prod.bestFor === 'string' ? prod.bestFor : '',
     };
   });
 
-  // Drop products missing essential fields (name+brand, ≥1 pro, ≥1 con, verdict).
-  // Never drop below 3 products to preserve the comparison experience.
+  // Drop items missing essential fields. Brand is optional (restaurants, trails,
+  // services often have no "brand") — require name + ≥1 pro + ≥1 con + 10+ char verdict.
+  // Never drop below 3 items to preserve the comparison experience.
   const complete = products.filter(
-    (p) => p.name && p.brand && p.pros.length >= 1 && p.cons.length >= 1 && p.verdict.length >= 10,
+    (p) => p.name && p.pros.length >= 1 && p.cons.length >= 1 && p.verdict.length >= 10,
   );
   const filtered = complete.length >= 3 ? complete : products;
 

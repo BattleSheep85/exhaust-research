@@ -1,7 +1,91 @@
-import { type Env, type ResearchRow, type ProductRow, type BuyersGuide, DEFAULT_AFFILIATE_TAG } from '../types';
+import { type Env, type ResearchRow, type ItemRow, type BuyersGuide, DEFAULT_AFFILIATE_TAG } from '../types';
 import { layout, html, type LayoutMeta } from '../lib/html';
 import { parseJsonSafe, isValidHttpUrl, escapeHtml, timeAgo, displayQuery } from '../lib/utils';
 import { searchBar } from './home';
+
+// Icons for well-known metadata keys. Unknown keys render with a generic dot so
+// new verticals render sensibly without code changes.
+const METADATA_ICONS: Record<string, string> = {
+  address: '&#128205;',        // pin
+  hours: '&#128336;',           // clock
+  phone: '&#128222;',           // phone
+  mapsUrl: '&#128506;&#65039;', // map
+  priceRange: '&#128176;',      // money bag
+  cuisine: '&#127869;&#65039;', // fork/knife
+  brand: '&#127991;&#65039;',   // label/tag
+  modelNumber: '&#128295;',     // wrench
+  releaseDate: '&#128197;',     // calendar
+  availability: '&#128230;',    // package
+  platform: '&#128187;',        // laptop
+  creator: '&#128100;',         // bust
+  length: '&#9202;',            // stopwatch
+  contentType: '&#128214;',     // book
+  location: '&#127758;',        // globe
+  season: '&#127809;',          // leaf
+  cost: '&#128181;',            // dollar
+  duration: '&#9202;',          // stopwatch
+  difficulty: '&#128170;',      // muscle
+  serviceArea: '&#128506;&#65039;', // map
+  pricingModel: '&#128200;',    // chart
+  credentials: '&#127891;',     // grad cap
+  responseTime: '&#9889;',      // bolt
+};
+
+function labelForMetadataKey(key: string): string {
+  const map: Record<string, string> = {
+    mapsUrl: 'Map',
+    priceRange: 'Price range',
+    modelNumber: 'Model',
+    releaseDate: 'Released',
+    availability: 'Availability',
+    contentType: 'Type',
+    serviceArea: 'Service area',
+    pricingModel: 'Pricing',
+    responseTime: 'Response time',
+  };
+  if (map[key]) return map[key];
+  // camelCase → "Camel case"
+  return key.replace(/([A-Z])/g, ' $1').replace(/^./, (c) => c.toUpperCase()).trim();
+}
+
+function renderMetadataPairs(metadata: Record<string, string>): string {
+  const entries = Object.entries(metadata).filter(([, v]) => v && v.trim().length > 0);
+  if (entries.length === 0) return '';
+  return `<dl class="item-metadata" style="display:grid;grid-template-columns:max-content 1fr;gap:.3rem .6rem;font-size:.85rem;margin:.65rem 0;color:var(--text2)">
+${entries.map(([k, v]) => {
+    const icon = METADATA_ICONS[k] ?? '&#9679;';
+    const label = escapeHtml(labelForMetadataKey(k));
+    // Render mapsUrl / URL-ish values as links when they look like URLs
+    const isUrl = /^https?:\/\//i.test(v) && isValidHttpUrl(v);
+    const value = isUrl
+      ? `<a href="${escapeHtml(v)}" target="_blank" rel="noopener noreferrer nofollow" style="color:var(--link)">${escapeHtml(new URL(v).hostname.replace(/^www\./, ''))}</a>`
+      : escapeHtml(v);
+    return `<dt style="color:var(--text3);white-space:nowrap"><span aria-hidden="true" style="margin-right:.3rem">${icon}</span>${label}</dt><dd style="margin:0">${value}</dd>`;
+  }).join('')}
+</dl>`;
+}
+
+// Soft gradient fallback when imageUrl is missing or fails to load. Keyed by
+// first letter so different items get distinct visual treatments without
+// needing a real image pipeline.
+function renderItemImage(imageUrl: string | null, name: string): string {
+  const safeName = escapeHtml(name.slice(0, 60));
+  const letter = escapeHtml((name.trim().charAt(0) || '?').toUpperCase());
+  const colorIndex = name.charCodeAt(0) % 6;
+  const gradients = [
+    'linear-gradient(135deg,#1e3a8a,#2563eb)',
+    'linear-gradient(135deg,#4c1d95,#7c3aed)',
+    'linear-gradient(135deg,#14532d,#16a34a)',
+    'linear-gradient(135deg,#7c2d12,#ea580c)',
+    'linear-gradient(135deg,#831843,#db2777)',
+    'linear-gradient(135deg,#0c4a6e,#0284c7)',
+  ];
+  const fallback = `<div class="item-image-fallback" aria-hidden="true" style="width:100%;aspect-ratio:16/9;background:${gradients[colorIndex]};display:flex;align-items:center;justify-content:center;border-radius:8px;margin-bottom:.75rem"><span style="font-size:2.5rem;font-weight:800;color:rgba(255,255,255,.85);letter-spacing:-.02em">${letter}</span></div>`;
+  if (!imageUrl || !isValidHttpUrl(imageUrl)) return fallback;
+  // onerror swaps the <img> for the fallback div — broken hotlinks degrade gracefully.
+  const fallbackEscaped = fallback.replace(/"/g, '&quot;');
+  return `<img src="${escapeHtml(imageUrl)}" alt="${safeName}" loading="lazy" referrerpolicy="no-referrer" style="width:100%;aspect-ratio:16/9;object-fit:cover;border-radius:8px;margin-bottom:.75rem;background:var(--surface)" onerror="this.outerHTML=&quot;${fallbackEscaped}&quot;">`;
+}
 
 // Allowlist of retailer hostnames we recognize as "buy" destinations.
 // Anything else (review sites, manufacturer pages, blogs) falls through to
@@ -182,10 +266,11 @@ function retailerLabel(url: string): string {
   } catch { return 'Retailer'; }
 }
 
-function renderProduct(p: ProductRow, index: number, affiliateTag: string, walmartImpactId: string | undefined, isService: boolean): string {
+function renderProduct(p: ItemRow, index: number, affiliateTag: string, walmartImpactId: string | undefined, isService: boolean): string {
   const pros = parseJsonSafe<string[]>(p.pros, []);
   const cons = parseJsonSafe<string[]>(p.cons, []);
   const specs = parseJsonSafe<Record<string, string>>(p.specs, {});
+  const metadata = parseJsonSafe<Record<string, string>>(p.metadata, {});
   const rankClass = p.rank === 1 ? 'rank-1' : p.rank === 2 ? 'rank-2' : p.rank === 3 ? 'rank-3' : 'rank-n';
 
   // Manufacturer product page (non-affiliate, informational)
@@ -237,7 +322,11 @@ function renderProduct(p: ProductRow, index: number, affiliateTag: string, walma
     links.push(`<a href="${escapeHtml(ctaUrl)}" target="_blank" rel="${ctaRel}" class="${cls}">${escapeHtml(ctaLabel)} <span aria-hidden="true">&#8599;</span></a>`);
   }
 
+  const imageBlock = renderItemImage(p.image_url, p.name);
+  const metadataBlock = renderMetadataPairs(metadata);
+
   return `<article class="product" id="product-${index + 1}">
+${imageBlock}
 <div class="product-header">
 <div>
 ${p.rank != null ? `<span class="product-rank ${rankClass}">#${p.rank}</span>` : ''}
@@ -250,6 +339,7 @@ ${p.rating != null ? `<p class="product-rating"><span aria-hidden="true">${'★'
 </div>
 </div>
 ${p.best_for ? `<div class="product-bestfor">Best for: ${escapeHtml(p.best_for)}</div>` : ''}
+${metadataBlock}
 ${p.verdict ? `<p class="product-verdict">${escapeHtml(p.verdict)}</p>` : ''}
 ${(pros.length > 0 || cons.length > 0) ? `<div class="pros-cons">
 ${pros.length > 0 ? `<div><h4 class="pro">Pros</h4><ul class="pro-list">${prosHtml}</ul></div>` : ''}
@@ -275,7 +365,7 @@ export async function renderResearchResult(slug: string, env: Env, fromQuery: st
     await env.DB.prepare('UPDATE research SET view_count = view_count + 1 WHERE id = ?').bind(entry.id).run();
   }
 
-  const productRows = await env.DB.prepare('SELECT * FROM products WHERE research_id = ? ORDER BY rank ASC').bind(entry.id).all<ProductRow>();
+  const productRows = await env.DB.prepare('SELECT * FROM products WHERE research_id = ? ORDER BY rank ASC').bind(entry.id).all<ItemRow>();
   const products = productRows.results ?? [];
 
   const related = entry.status === 'complete'

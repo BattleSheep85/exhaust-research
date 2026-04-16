@@ -55,9 +55,9 @@ export default {
   },
   async queue(batch: MessageBatch<ResearchJobMessage>, env: Env): Promise<void> {
     for (const msg of batch.messages) {
-      const { researchId, query, tier } = msg.body;
+      const { researchId, query, tier, facets, topicalCategory } = msg.body;
       try {
-        await executeResearch(env, researchId, query, tier);
+        await executeResearch(env, researchId, query, tier, facets, topicalCategory ?? null);
         msg.ack();
       } catch (err) {
         console.error('[queue] research job failed:', researchId, err);
@@ -477,10 +477,44 @@ async function handleNewResearch(request: Request, url: URL, env: Env, ctx: Exec
 
   // Error page
   let errorMsg = 'Something went wrong. Please try again.';
+  let rejected = false;
+  let suggestedRefinement: string | null = null;
   try {
-    const data: { error?: string } = await result.json();
-    if (data.error && data.error.length < 200) errorMsg = data.error;
+    const data: { error?: string; rejected?: boolean; reason?: string; suggested_refinement?: string | null } = await result.json();
+    if (data.rejected) {
+      rejected = true;
+      if (data.reason && data.reason.length < 400) errorMsg = data.reason;
+      if (typeof data.suggested_refinement === 'string' && data.suggested_refinement.length > 0) {
+        suggestedRefinement = data.suggested_refinement.slice(0, 200);
+      }
+    } else if (data.error && data.error.length < 200) {
+      errorMsg = data.error;
+    }
   } catch { /* use default */ }
+
+  if (rejected) {
+    const refinementBlock = suggestedRefinement
+      ? `<p style="color:var(--text2);margin-top:1rem;font-size:.9rem"><strong style="color:var(--text)">Try this instead:</strong> ${escapeHtml(suggestedRefinement)}</p>
+<div style="margin-top:.75rem"><a href="/research/new?q=${encodeURIComponent(suggestedRefinement)}" class="btn">Research &ldquo;${escapeHtml(suggestedRefinement.slice(0, 60))}${suggestedRefinement.length > 60 ? '…' : ''}&rdquo;</a></div>`
+      : '';
+    return htmlResponse(
+      layout('Query declined', errorMsg, `<div class="container empty" style="max-width:40rem;margin:0 auto;padding:4rem 1.5rem">
+<div class="empty-icon"><svg width="32" height="32" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M4.93 19h14.14c1.54 0 2.5-1.67 1.73-3L13.73 4a2 2 0 00-3.46 0L3.2 16c-.77 1.33.19 3 1.73 3z"/></svg></div>
+<h2>We couldn't research that</h2>
+<p style="color:var(--text2);line-height:1.6">${escapeHtml(errorMsg)}</p>
+${refinementBlock}
+<div style="margin-top:2rem;padding-top:1.5rem;border-top:1px solid var(--surface2)">
+<p style="color:var(--text3);font-size:.85rem;margin-bottom:.75rem">Or try a different query:</p>
+${searchBar('compact', env.TURNSTILE_SITE_KEY)}
+</div>
+<div style="display:flex;gap:.5rem;flex-wrap:wrap;justify-content:center;margin-top:1.5rem">
+<a href="/research" class="btn btn-ghost">Browse existing research</a>
+<a href="/" class="btn btn-ghost">Home</a>
+</div>
+</div>`, '<meta name="robots" content="noindex, nofollow">'),
+      400, analyticsToken, adsensePub,
+    );
+  }
 
   if (result.status === 429) {
     return htmlResponse(

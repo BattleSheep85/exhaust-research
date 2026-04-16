@@ -1,7 +1,8 @@
-import { type Env, type Tier, DEFAULT_AFFILIATE_TAG } from '../types';
+import { type Env, type Tier, type Facets, DEFAULT_AFFILIATE_TAG } from '../types';
 import { generateId, generateSlug, sanitizeUrl, generateAffiliateUrl, canonicalizeQuery, displayQuery } from '../lib/utils';
 import { runEngine } from '../lib/engine';
 import { getTierConfig, isValidTier } from '../lib/research-config';
+import { classifyQuery, userFacingRejection } from '../lib/classifier';
 
 // Clustering: a completed research with the same canonical form from within this
 // window is served directly instead of re-running the pipeline.
@@ -81,29 +82,45 @@ export async function handleResearchPost(request: Request, env: Env, ctx: Execut
     }
   }
 
+  // Classify & BS-filter. Runs after cluster lookup so cached queries don't pay
+  // the classifier tax. Fail-open on transport errors — see classifier.ts.
+  const classification = await classifyQuery(env, query, canonical);
+  if (!classification.accept) {
+    return json({
+      rejected: true,
+      reason: userFacingRejection(classification.reject_reason),
+      category: classification.reject_reason,
+      suggested_refinement: classification.suggested_refinement,
+    }, 400);
+  }
+
+  const facets: Facets = classification.facets;
+  const topicalCategory = classification.topical_category;
+
   const researchId = generateId();
   const slug = generateSlug(query);
   const now = Math.floor(Date.now() / 1000);
+  const facetsJson = JSON.stringify(facets);
 
   try {
     await env.DB.prepare(
-      'INSERT INTO research (id, slug, query, status, tier, canonical_query, created_at, view_count) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, 0)'
-    ).bind(researchId, slug, query, 'pending', tier, canonical, now).run();
+      'INSERT INTO research (id, slug, query, status, tier, canonical_query, topical_category, facets, created_at, view_count) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, 0)'
+    ).bind(researchId, slug, query, 'pending', tier, canonical, topicalCategory, facetsJson, now).run();
   } catch {
     // Slug collision — retry with fresh slug
     const slug2 = generateSlug(query);
     try {
       await env.DB.prepare(
-        'INSERT INTO research (id, slug, query, status, tier, canonical_query, created_at, view_count) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, 0)'
-      ).bind(researchId, slug2, query, 'pending', tier, canonical, now).run();
+        'INSERT INTO research (id, slug, query, status, tier, canonical_query, topical_category, facets, created_at, view_count) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, 0)'
+      ).bind(researchId, slug2, query, 'pending', tier, canonical, topicalCategory, facetsJson, now).run();
     } catch {
       return json({ error: 'Failed to create research. Please try again.' }, 500);
     }
-    await env.RESEARCH_QUEUE.send({ researchId, query, tier });
+    await env.RESEARCH_QUEUE.send({ researchId, query, tier, facets, topicalCategory });
     return json({ slug: slug2 }, 201);
   }
 
-  await env.RESEARCH_QUEUE.send({ researchId, query, tier });
+  await env.RESEARCH_QUEUE.send({ researchId, query, tier, facets, topicalCategory });
   return json({ slug }, 201);
 }
 
@@ -143,7 +160,7 @@ async function generatePreview(env: Env, researchId: string, query: string): Pro
   }
 }
 
-export async function executeResearch(env: Env, researchId: string, query: string, tier: Tier): Promise<void> {
+export async function executeResearch(env: Env, researchId: string, query: string, tier: Tier, facets?: Facets, topicalCategory?: string | null): Promise<void> {
   const config = getTierConfig(tier);
 
   await env.DB.prepare("UPDATE research SET status = 'processing' WHERE id = ?1").bind(researchId).run();
@@ -159,6 +176,8 @@ export async function executeResearch(env: Env, researchId: string, query: strin
       env.TAVILY_API_KEY,
       env.DB,
       researchId,
+      facets,
+      topicalCategory ?? null,
     );
     // Don't let a hung preview block the main flow, but don't leak it either.
     previewPromise.catch(() => {});
@@ -167,17 +186,20 @@ export async function executeResearch(env: Env, researchId: string, query: strin
     const walmartId = env.WALMART_IMPACT_ID;
     const now = Math.floor(Date.now() / 1000);
 
-    // Batch insert products
+    // Batch insert items. `metadata` absorbs any facet-specific key/value pairs
+    // (address, hours, cuisine, etc.) that don't fit the buyable-product columns.
     const stmts = result.products.map((p) => {
       const aUrl = p.productUrl ? sanitizeUrl(generateAffiliateUrl(p.productUrl, affiliateTag, walmartId)) : '';
+      const metadataJson = p.metadata && Object.keys(p.metadata).length > 0 ? JSON.stringify(p.metadata) : null;
+      const imageUrl = p.imageUrl ? sanitizeUrl(p.imageUrl) : null;
       return env.DB.prepare(
-        `INSERT INTO products (id, research_id, name, brand, price, currency, rating, product_url, manufacturer_url, affiliate_url, pros, cons, specs, verdict, rank, best_for)
-         VALUES (?1, ?2, ?3, ?4, ?5, 'USD', ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)`
+        `INSERT INTO products (id, research_id, name, brand, price, currency, rating, image_url, product_url, manufacturer_url, affiliate_url, pros, cons, specs, verdict, rank, best_for, metadata)
+         VALUES (?1, ?2, ?3, ?4, ?5, 'USD', ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)`
       ).bind(
         generateId(), researchId, p.name, p.brand || null, p.price, p.rating,
-        sanitizeUrl(p.productUrl), sanitizeUrl(p.manufacturerUrl), aUrl,
+        imageUrl, sanitizeUrl(p.productUrl), sanitizeUrl(p.manufacturerUrl), aUrl,
         JSON.stringify(p.pros), JSON.stringify(p.cons), JSON.stringify(p.specs),
-        p.verdict, p.rank, p.bestFor || null,
+        p.verdict, p.rank, p.bestFor || null, metadataJson,
       );
     });
 

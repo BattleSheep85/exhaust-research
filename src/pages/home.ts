@@ -162,15 +162,17 @@ export async function renderHome(env: Env): Promise<string> {
   const body = `
 <section class="hero container">
 <div class="badge">&#9889; Powered by AI</div>
-<h1>Product research by <em>Chrisputer Labs</em></h1>
-<p>20 years of IT expertise meets AI. We scrape dozens of sources, feed it all to AI, and give you brutally honest product comparisons backed by real-world experience.</p>
+<h1>Honest research by <em>Chrisputer Labs</em></h1>
+<p>20 years of IT expertise meets AI. We scrape dozens of sources and give you brutally honest recommendations — products, services, places, apps — without the sponsored-pick noise.</p>
 ${searchBar('large', tsKey)}
 <div class="try-links">
 <span>Try:</span>
 <a href="/research/new?q=best+mechanical+keyboard+under+100">mechanical keyboards</a>
 <a href="/research/new?q=best+home+NAS+for+2026">home NAS</a>
-<a href="/research/new?q=best+budget+4k+monitor">4K monitors</a>
 <a href="/research/new?q=best+mesh+wifi+system+2026">mesh WiFi</a>
+<a href="/research/new?q=best+podcast+apps+for+android">podcast apps</a>
+<a href="/research/new?q=best+tax+software+for+self+employed">tax software</a>
+<a href="/research/new?q=best+noise+cancelling+headphones+for+flights">travel headphones</a>
 </div>
 </section>
 

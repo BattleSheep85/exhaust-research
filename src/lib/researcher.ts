@@ -1,4 +1,4 @@
-import type { ScrapedSource, ResearchResult, ProductResult } from '../types';
+import type { ScrapedSource, ResearchResult, ItemResult } from '../types';
 
 const MAX_SOURCE_CONTEXT = 80_000;
 
@@ -128,9 +128,9 @@ function validateResearchResult(data: unknown): ResearchResult {
   if (!summary) throw new Error('Missing summary in response');
 
   const rawProducts = Array.isArray(obj.products) ? obj.products : [];
-  const products: ProductResult[] = rawProducts.slice(0, 20).map((p: unknown, i: number) => {
+  const products: ItemResult[] = rawProducts.slice(0, 20).map((p: unknown, i: number) => {
     if (!p || typeof p !== 'object') {
-      return { name: `Product ${i + 1}`, brand: '', price: null, rating: null, productUrl: '', pros: [], cons: [], specs: {}, verdict: '', rank: i + 1, bestFor: '' };
+      return { name: `Product ${i + 1}`, brand: '', price: null, rating: null, productUrl: '', manufacturerUrl: '', imageUrl: '', pros: [], cons: [], specs: {}, metadata: {}, verdict: '', rank: i + 1, bestFor: '' };
     }
     const prod = p as Record<string, unknown>;
     return {
@@ -139,9 +139,12 @@ function validateResearchResult(data: unknown): ResearchResult {
       price: typeof prod.price === 'number' ? prod.price : null,
       rating: typeof prod.rating === 'number' && prod.rating >= 0 && prod.rating <= 5 ? prod.rating : null,
       productUrl: typeof prod.productUrl === 'string' ? prod.productUrl : '',
+      manufacturerUrl: typeof prod.manufacturerUrl === 'string' ? prod.manufacturerUrl : '',
+      imageUrl: '',
       pros: Array.isArray(prod.pros) ? prod.pros.filter((x: unknown) => typeof x === 'string') : [],
       cons: Array.isArray(prod.cons) ? prod.cons.filter((x: unknown) => typeof x === 'string') : [],
       specs: isStringRecord(prod.specs) ? prod.specs : {},
+      metadata: {},
       verdict: typeof prod.verdict === 'string' ? prod.verdict : '',
       rank: typeof prod.rank === 'number' ? prod.rank : i + 1,
       bestFor: typeof prod.bestFor === 'string' ? prod.bestFor : '',

@@ -16,6 +16,8 @@ export interface ResearchJobMessage {
   researchId: string;
   query: string;
   tier: Tier;
+  facets?: Facets;
+  topicalCategory?: string | null;
 }
 
 export const DEFAULT_AFFILIATE_TAG = 'battlesheep0a-20';
@@ -37,6 +39,38 @@ export interface ResearchConfig {
   requireSubscription: boolean;
 }
 
+// ─── Classifier ──────────────────────────────────────────────────────────────
+
+// Facets describe what the query needs, not a rigid type. A query can light up
+// multiple facets simultaneously (e.g. "best pizza delivery in Austin" is
+// is_buyable + needs_location + is_service).
+export interface Facets {
+  needs_location: boolean;
+  is_buyable: boolean;
+  is_experience: boolean;
+  is_content: boolean;
+  is_service: boolean;
+  is_comparative: boolean;
+}
+
+export interface ClassifierResult {
+  accept: boolean;
+  reject_reason:
+    | 'jailbreak'
+    | 'illegal'
+    | 'medical'
+    | 'legal'
+    | 'adult'
+    | 'nonsense'
+    | 'self-harm'
+    | 'harassment'
+    | 'financial-picks'
+    | null;
+  topical_category: string | null;
+  facets: Facets;
+  suggested_refinement: string | null;
+}
+
 // ─── Database rows ───────────────────────────────────────────────────────────
 
 export interface ResearchRow {
@@ -46,6 +80,8 @@ export interface ResearchRow {
   status: 'pending' | 'processing' | 'complete' | 'failed';
   tier: Tier;
   category: string | null;
+  topical_category: string | null;
+  facets: string | null;
   summary: string | null;
   result: string | null;
   sources: string | null;
@@ -55,7 +91,10 @@ export interface ResearchRow {
   view_count: number;
 }
 
-export interface ProductRow {
+// Table name stays `products` for continuity with existing data, but the shape
+// is now the universal "item" schema — product-specific columns coexist with
+// freeform `metadata` JSON for non-product verticals (restaurants, trails, etc.)
+export interface ItemRow {
   id: string;
   research_id: string;
   name: string;
@@ -73,7 +112,11 @@ export interface ProductRow {
   verdict: string | null;
   rank: number | null;
   best_for: string | null;
+  metadata: string | null;
 }
+
+// Legacy alias — existing code imports ProductRow; keep working.
+export type ProductRow = ItemRow;
 
 export interface ResearchEventRow {
   id: number;
@@ -137,22 +180,32 @@ export interface BuyersGuide {
 export interface ResearchResult {
   summary: string;
   category: string;
-  products: ProductResult[];
+  products: ItemResult[];
   methodology: string;
   buyersGuide?: BuyersGuide;
 }
 
-export interface ProductResult {
+// Universal item result. Core fields (name/rating/verdict/pros/cons/bestFor/rank)
+// apply to anything. Product-specific (brand/price/specs/productUrl) stay as
+// nullable typed fields for backwards compat with the established pipeline.
+// Anything that doesn't fit the typed fields goes into `metadata` — address,
+// hours, cuisine, serviceArea, whatever the classifier's facets implied.
+export interface ItemResult {
   name: string;
   brand: string;
   price: number | null;
   rating: number | null;
   productUrl: string;
   manufacturerUrl: string;
+  imageUrl: string;
   pros: string[];
   cons: string[];
   specs: Record<string, string>;
+  metadata: Record<string, string>;
   verdict: string;
   rank: number;
   bestFor: string;
 }
+
+// Legacy alias — existing code references ProductResult.
+export type ProductResult = ItemResult;
