@@ -193,7 +193,7 @@ ${priceNote}
 ${brandNote}
 - COMPLETENESS IS MANDATORY. Every item object MUST have: non-empty name; a numeric rating 0-5 (inferred if not explicit); AT LEAST 3 specific pros and AT LEAST 2 specific cons (nothing is flawless — if you can't name 2 honest cons it doesn't belong on the list); a verdict of 15+ words. Items missing any of these will be discarded before the user sees them.
 - THE "buyersGuide" OBJECT IS REQUIRED AND NON-NEGOTIABLE. Every response MUST include a populated buyersGuide with: a 3-5 sentence "howToChoose" string, at least 3 concrete "pitfalls" strings, and at least 3 concrete "marketingToIgnore" strings. Do NOT omit this field. Do NOT return empty arrays. Output the buyersGuide BEFORE products in the JSON so it is never truncated. Responses missing buyersGuide will be rejected and regenerated.
-- imageUrl: extract the single best representative image URL from your sources (product photo, restaurant exterior, app screenshot, trail photo). Must be a full https:// URL from your research sources. Empty string if nothing usable was found — DO NOT invent URLs.
+- imageUrl: extract the single best representative image URL — a DIRECT IMAGE FILE URL, not a page URL. The URL path MUST end in .jpg, .jpeg, .png, .webp, .gif, or .avif (query strings are fine: .jpg?v=123). NEVER use YouTube/Vimeo URLs (those are video pages, not images). NEVER use review or listing pages (alltrails.com/trail/..., tripadvisor.com/Restaurant_Review..., guardian.com/books/...). NEVER use a restaurant's or manufacturer's homepage URL. If the only image URL you can find is a page URL, return empty string — an honest blank is MUCH better than a broken <img src>. When scanning sources for images, look for URLs containing /images/, /photos/, /cdn/, /uploads/, or hostnames like cdn.*, images.*, static.*, media.*.
 - metadata: a flat object of string key/value pairs relevant to this item. Suggested keys for this query: ${metadataHint}. Keep values concise (under 120 chars each). Omit keys with no real data.
 
 RESEARCH NOTES:
@@ -730,12 +730,37 @@ function formatToolEvent(name: string, args: Record<string, unknown>): string {
 
 import type { ItemResult } from '../types';
 
+// Hosts that only serve pages (never direct images) — if the LLM hands us one
+// of these, it's a review/video/listing URL, not an image.
+const NON_IMAGE_HOSTS = new Set([
+  'youtube.com', 'www.youtube.com', 'm.youtube.com', 'youtu.be',
+  'vimeo.com', 'www.vimeo.com',
+  'tiktok.com', 'www.tiktok.com',
+  'instagram.com', 'www.instagram.com',
+  'twitter.com', 'x.com', 'facebook.com', 'www.facebook.com',
+  'reddit.com', 'www.reddit.com',
+]);
+
+const IMAGE_EXT_RE = /\.(jpg|jpeg|png|webp|gif|avif)(\?|#|$)/i;
+
 function sanitizeImageUrl(val: unknown): string {
   if (typeof val !== 'string') return '';
   const trimmed = val.trim();
   if (!trimmed) return '';
   if (!/^https:\/\//i.test(trimmed)) return '';
   if (trimmed.length > 2000) return '';
+  // Path must end in a recognized image extension (query/fragment allowed after).
+  // Rejects page URLs the LLM occasionally returns (alltrails trail pages,
+  // tripadvisor review pages, manufacturer homepages, article URLs).
+  if (!IMAGE_EXT_RE.test(trimmed)) return '';
+  try {
+    const host = new URL(trimmed).hostname.toLowerCase();
+    if (NON_IMAGE_HOSTS.has(host)) return '';
+    // Extra belt-and-suspenders for the common "video platform page" pattern.
+    if (host.endsWith('.youtube.com') || host.endsWith('.vimeo.com')) return '';
+  } catch {
+    return '';
+  }
   return trimmed;
 }
 
