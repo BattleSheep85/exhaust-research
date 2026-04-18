@@ -87,9 +87,13 @@ def run(base: str) -> Suite:
             assert "max-age" in cc, f"{path} missing max-age: {cc}"
         return True
 
-    @case(s, "API responses are no-store (not cached)")
+    @case(s, "Mutating API endpoints are no-store")
     def _():
-        r = sess.get(f"{base}/api/search/suggest?q=test", timeout=10)
+        # POST /api/subscribe: mutation, must not be cached. Bad JSON returns 400
+        # with Cache-Control: no-store. /api/search/suggest is deliberately edge-
+        # cacheable (R78) — autocomplete popular prefixes cost O(FTS) per keystroke
+        # without the cache — so it's exempt.
+        r = sess.post(f"{base}/api/subscribe", data="{", headers={"Content-Type": "application/json"}, timeout=10)
         assert r.headers.get("Cache-Control") == "no-store", r.headers.get("Cache-Control")
         return True
 

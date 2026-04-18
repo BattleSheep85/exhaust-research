@@ -2,7 +2,7 @@ import { layout } from '../lib/html';
 
 export function renderAbout(): string {
   const canonical = '<link rel="canonical" href="https://chrisputer.tech/about">';
-  const authorJsonLd = `<script type="application/ld+json">${JSON.stringify({
+  const authorJsonLd = `<script type="application/ld+json" nonce="__CSP_NONCE__">${JSON.stringify({
     '@context': 'https://schema.org',
     '@type': 'AboutPage',
     '@id': 'https://chrisputer.tech/about',
@@ -22,7 +22,7 @@ export function renderAbout(): string {
       worksFor: { '@id': 'https://chrisputer.tech/#organization' },
     },
   })}</script>`;
-  const breadcrumbLd = `<script type="application/ld+json">${JSON.stringify({
+  const breadcrumbLd = `<script type="application/ld+json" nonce="__CSP_NONCE__">${JSON.stringify({
     '@context': 'https://schema.org',
     '@type': 'BreadcrumbList',
     itemListElement: [
@@ -30,7 +30,7 @@ export function renderAbout(): string {
       { '@type': 'ListItem', position: 2, name: 'About', item: 'https://chrisputer.tech/about' },
     ],
   })}</script>`;
-  return layout('About', 'About Chrisputer Labs — AI-powered product research backed by 20 years of IT expertise.', `
+  return layout('About', 'About Chrisputer Labs — brutally honest product research, no sponsored picks.', `
 <div class="container prose" style="padding:4rem 1.5rem;max-width:48rem;margin:0 auto">
 <nav aria-label="Breadcrumb" class="breadcrumb" style="font-size:.85rem;color:var(--text2);margin-bottom:1rem">
 <a href="/" style="color:var(--text2)">Home</a>

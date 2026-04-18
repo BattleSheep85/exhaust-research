@@ -1,6 +1,6 @@
 import type { Env, ResearchRow } from '../types';
 import { layout, html, raw } from '../lib/html';
-import { timeAgo, escapeHtml, displayQuery } from '../lib/utils';
+import { timeAgo, escapeHtml, displayQuery, publicResearchFilter } from '../lib/utils';
 
 function searchBar(size: 'large' | 'compact' = 'large', turnstileSiteKey?: string): string {
   const ph = size === 'large'
@@ -35,10 +35,10 @@ function searchBar(size: 'large' | 'compact' = 'large', turnstileSiteKey?: strin
 </div>` : '<input type="hidden" name="tier" value="instant">';
 
   const turnstileToggle = (size === 'large' && turnstileSiteKey)
-    ? `<script>document.querySelectorAll('input[name="tier"]').forEach(function(r){r.addEventListener('change',function(){var w=document.getElementById('turnstile-wrap');if(w)w.style.display=this.value==='exhaustive'?'':'none'})})</script>`
+    ? `<script nonce="__CSP_NONCE__">document.querySelectorAll('input[name="tier"]').forEach(function(r){r.addEventListener('change',function(){var w=document.getElementById('turnstile-wrap');if(w)w.style.display=this.value==='exhaustive'?'':'none'})})</script>`
     : '';
 
-  const loadingScript = `<script>
+  const loadingScript = `<script nonce="__CSP_NONCE__">
 (function(){
 if(window.__loadInit)return;window.__loadInit=true;
 document.querySelectorAll('form.search-form').forEach(function(f){
@@ -56,7 +56,7 @@ if(btn){btn.disabled=true;btn.textContent='Researching\u2026'}
 })();
 </script>`;
 
-  const autocompleteScript = `<script>
+  const autocompleteScript = `<script nonce="__CSP_NONCE__">
 (function(){
 if(window.__acInit)return;window.__acInit=true;
 var inputs=document.querySelectorAll('input[name="q"]');
@@ -128,10 +128,7 @@ export async function renderHome(env: Env): Promise<string> {
     `WITH ranked AS (
        SELECT r.*, ROW_NUMBER() OVER (PARTITION BY COALESCE(r.canonical_query, r.slug) ORDER BY r.created_at DESC) AS rn
        FROM research r
-       WHERE r.status = 'complete'
-         AND EXISTS (SELECT 1 FROM products p WHERE p.research_id = r.id)
-         AND LENGTH(r.query) >= 10 AND r.query LIKE '% %'
-         AND r.query NOT LIKE 'test %' AND r.query NOT LIKE 'verify %'
+       WHERE ${publicResearchFilter('r')}
      )
      SELECT *, (SELECT COUNT(*) FROM products WHERE products.research_id = ranked.id) AS product_count
      FROM ranked WHERE rn = 1
@@ -142,10 +139,7 @@ export async function renderHome(env: Env): Promise<string> {
     `WITH ranked AS (
        SELECT r.*, ROW_NUMBER() OVER (PARTITION BY COALESCE(r.canonical_query, r.slug) ORDER BY r.view_count DESC, r.created_at DESC) AS rn
        FROM research r
-       WHERE r.status = 'complete'
-         AND EXISTS (SELECT 1 FROM products p WHERE p.research_id = r.id)
-         AND LENGTH(r.query) >= 10 AND r.query LIKE '% %'
-         AND r.query NOT LIKE 'test %' AND r.query NOT LIKE 'verify %'
+       WHERE ${publicResearchFilter('r')}
      )
      SELECT *, (SELECT COUNT(*) FROM products WHERE products.research_id = ranked.id) AS product_count
      FROM ranked WHERE rn = 1
@@ -163,7 +157,7 @@ export async function renderHome(env: Env): Promise<string> {
 <section class="hero container">
 <div class="badge">&#9889; Powered by AI</div>
 <h1>Honest research by <em>Chrisputer Labs</em></h1>
-<p>20 years of IT expertise meets AI. We scrape dozens of sources and give you brutally honest recommendations — products, services, places, apps — without the sponsored-pick noise.</p>
+<p>Brutally honest product research. We scrape dozens of sources so you don't have to — products, services, places, apps — and skip the sponsored-pick noise.</p>
 ${searchBar('large', tsKey)}
 <div class="try-links">
 <span>Try:</span>
@@ -218,14 +212,14 @@ ${searchBar('compact', tsKey)}
 </div>
 </section>`;
 
-  const websiteJsonLd = `<script type="application/ld+json">${JSON.stringify({
+  const websiteJsonLd = `<script type="application/ld+json" nonce="__CSP_NONCE__">${JSON.stringify({
     '@context': 'https://schema.org',
     '@type': 'WebSite',
     '@id': 'https://chrisputer.tech/#website',
     name: 'Chrisputer Labs',
     url: 'https://chrisputer.tech',
     inLanguage: 'en-US',
-    description: 'AI-powered product research backed by 20 years of IT expertise.',
+    description: 'Brutally honest product research. Real sources, no sponsored picks.',
     publisher: { '@id': 'https://chrisputer.tech/#organization' },
     potentialAction: {
       '@type': 'SearchAction',
@@ -236,7 +230,7 @@ ${searchBar('compact', tsKey)}
       'query-input': 'required name=search_term_string',
     },
   })}</script>`;
-  const organizationJsonLd = `<script type="application/ld+json">${JSON.stringify({
+  const organizationJsonLd = `<script type="application/ld+json" nonce="__CSP_NONCE__">${JSON.stringify({
     '@context': 'https://schema.org',
     '@type': 'Organization',
     '@id': 'https://chrisputer.tech/#organization',
@@ -265,7 +259,7 @@ ${searchBar('compact', tsKey)}
 
   const canonical = '<link rel="canonical" href="https://chrisputer.tech/">';
   const turnstileScript = tsKey
-    ? '<script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>'
+    ? '<script nonce="__CSP_NONCE__" src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>'
     : '';
-  return layout('AI-Powered Product Research', 'AI-powered product research backed by 20 years of IT expertise.', body, canonical + websiteJsonLd + organizationJsonLd + turnstileScript, { ogUrl: 'https://chrisputer.tech/' });
+  return layout('AI-Powered Product Research', 'Brutally honest product research. Real sources, no sponsored picks.', body, canonical + websiteJsonLd + organizationJsonLd + turnstileScript, { ogUrl: 'https://chrisputer.tech/' });
 }

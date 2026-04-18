@@ -21,6 +21,6 @@ export function adSlot(env: Env, key: SlotKey, label: string): string {
   return `<aside class="ad-slot ad-slot-${key}" aria-label="Advertisement" style="margin:2rem 0;min-height:100px">
 <div style="font-size:.7rem;text-transform:uppercase;letter-spacing:.08em;color:var(--text3);margin-bottom:.35rem;text-align:center">${escapeHtml(label)}</div>
 <ins class="adsbygoogle" style="display:block" data-ad-client="ca-${escapeHtml(pub)}" data-ad-slot="${escapeHtml(slotId)}" data-ad-format="auto" data-full-width-responsive="true"></ins>
-<script>(adsbygoogle=window.adsbygoogle||[]).push({})</script>
+<script nonce="__CSP_NONCE__">(adsbygoogle=window.adsbygoogle||[]).push({})</script>
 </aside>`;
 }

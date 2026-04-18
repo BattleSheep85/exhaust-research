@@ -52,31 +52,28 @@ def run(base: str) -> Suite:
             assert count >= 1, f"no product cards found in /research/{slug}"
             return True, "", f"cards={count}"
 
-        @case(s, f"/research/{slug}: every product card has a buy link")
+        @case(s, f"/research/{slug}: at least one product card has an outbound link")
         def _():
+            # Post-R107 honesty policy: we refuse to fabricate Amazon search URLs
+            # for products we don't have a real SKU for. Legitimate research pages
+            # can have product cards with no CTA (when neither retailer URL nor
+            # manufacturer URL is known). Still require SOME outbound so the page
+            # carries monetization potential.
             html = sess.get(f"{base}/research/{slug}", timeout=15).text
-            # Split on product boundary, count cards that have an affiliate href
             cards = re.split(r'class=["\']product["\']', html)[1:]
-            missing = []
-            for i, card in enumerate(cards):
-                # cut at next card or near-card to stay local
+            with_link = 0
+            for card in cards:
                 snippet = card[:3000]
-                has_buy = (
+                if (
                     "amazon.com" in snippet
                     or "walmart.com" in snippet
-                    or 'class="buy-btn"' in snippet
-                    or "class='buy-btn'" in snippet
                     or "Buy on " in snippet
-                    # Service-category CTAs (per #47 — no Amazon for realtor/contractor/etc.)
                     or "product-link-mfr" in snippet
-                    or "product-link-search" in snippet
                     or "Visit site" in snippet
-                    or "Search online" in snippet
-                )
-                if not has_buy:
-                    missing.append(i)
-            assert not missing, f"{len(missing)}/{len(cards)} cards missing buy link: idx={missing[:5]}"
-            return True, "", f"cards={len(cards)}"
+                ):
+                    with_link += 1
+            assert with_link > 0, f"0/{len(cards)} cards have any outbound link"
+            return True, "", f"{with_link}/{len(cards)} cards linked"
 
         @case(s, f"/research/{slug}: share buttons rendered")
         def _():

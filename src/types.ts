@@ -43,7 +43,11 @@ export interface ResearchConfig {
   maxToolCalls: number;
   maxSearches: number;
   maxFetches: number;
-  timeoutMs: number;
+  // Upper bound on the agent-loop wall clock (scrape/plan phase). NOT the
+  // fetch handler's total budget — that's governed by CF's 15-min isolate
+  // wall-clock for queue consumers. The synthesis LLM call runs *after* this
+  // budget and has its own llmBudgetMs() timer.
+  agentLoopBudgetMs: number;
   synthModel: string;
   plannerModel: string;
   synthReasoningEffort?: 'low' | 'medium' | 'high';

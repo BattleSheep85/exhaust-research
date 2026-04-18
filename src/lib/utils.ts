@@ -17,17 +17,20 @@ export function generateSlug(query: string): string {
   return `${base}-${suffix}`;
 }
 
-export function isValidHttpUrl(url: string): boolean {
+// https-only URL validator. Callers render these as <a href>, <img src>, or
+// persist them — mixed-content risk on every surface, so reject http:// up
+// front. CLAUDE.md's URL validation contract. CSP's upgrade-insecure-requests
+// is a belt; this is the suspenders.
+export function isValidHttpsUrl(url: string): boolean {
   try {
-    const parsed = new URL(url);
-    return parsed.protocol === 'https:' || parsed.protocol === 'http:';
+    return new URL(url).protocol === 'https:';
   } catch {
     return false;
   }
 }
 
 export function sanitizeUrl(url: string): string {
-  return isValidHttpUrl(url) ? url : '';
+  return isValidHttpsUrl(url) ? url : '';
 }
 
 export function escapeLikeWildcards(input: string): string {
@@ -41,6 +44,15 @@ export function escapeHtml(str: string): string {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
+}
+
+export function escapeXml(str: string): string {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
 }
 
 const LOWERCASE_WORDS = new Set(['a', 'an', 'the', 'and', 'or', 'but', 'for', 'of', 'in', 'on', 'to', 'vs', 'at', 'by', 'with', 'from', 'as', 'is']);
@@ -93,6 +105,20 @@ function stripFiller(token: string): string {
   return token;
 }
 
+// Shared WHERE clause for rows that may be exposed to crawlers, sitemaps, or
+// browse/home listings. Previously copy-pasted across ~7 call sites — each new
+// filter rule (bot-UA probe cleanup, thin-page exclusion) had to be threaded
+// through every query. Pass the alias used in the caller's FROM clause
+// (e.g. 'r' for `FROM research r`, 'research' for unaliased queries). The
+// correlated EXISTS subquery always qualifies the outer id to avoid ambiguity.
+// Alias is never user-provided; callers pass a literal string.
+export function publicResearchFilter(alias: 'r' | 'research'): string {
+  return `${alias}.status = 'complete'
+    AND EXISTS (SELECT 1 FROM products p WHERE p.research_id = ${alias}.id)
+    AND LENGTH(${alias}.query) >= 10 AND ${alias}.query LIKE '% %'
+    AND ${alias}.query NOT LIKE 'test %' AND ${alias}.query NOT LIKE 'verify %'`;
+}
+
 export function canonicalizeQuery(query: string): string {
   const tokens = query
     .toLowerCase()
@@ -103,20 +129,4 @@ export function canonicalizeQuery(query: string): string {
   // Sort for order-insensitivity. "best keyboard budget" == "budget keyboard best".
   const unique = Array.from(new Set(tokens)).sort();
   return unique.join(' ');
-}
-
-export function generateAffiliateUrl(productUrl: string, amazonTag: string, walmartImpactId?: string): string {
-  try {
-    const url = new URL(productUrl);
-    if (url.hostname.includes('amazon.com')) {
-      url.searchParams.set('tag', amazonTag);
-      return url.toString();
-    }
-    if (walmartImpactId && url.hostname.includes('walmart.com')) {
-      return `https://goto.walmart.com/c/${encodeURIComponent(walmartImpactId)}/s/1?u=${encodeURIComponent(productUrl)}`;
-    }
-    return productUrl;
-  } catch {
-    return productUrl;
-  }
 }

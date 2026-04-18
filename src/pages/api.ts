@@ -1,5 +1,6 @@
 import { type Env, type Tier, type Facets, DEFAULT_AFFILIATE_TAG } from '../types';
-import { generateId, generateSlug, sanitizeUrl, generateAffiliateUrl, canonicalizeQuery, displayQuery } from '../lib/utils';
+import { generateId, generateSlug, sanitizeUrl, canonicalizeQuery, displayQuery } from '../lib/utils';
+import { buildAffiliateUrl, type AffiliateIds } from '../lib/affiliate';
 import { runEngine } from '../lib/engine';
 import { getTierConfig, isValidTier } from '../lib/research-config';
 import { classifyQuery, userFacingRejection } from '../lib/classifier';
@@ -7,6 +8,23 @@ import { classifyQuery, userFacingRejection } from '../lib/classifier';
 // Clustering: a completed research with the same canonical form from within this
 // window is served directly instead of re-running the pipeline.
 const CLUSTER_MAX_AGE_SECONDS = 14 * 24 * 3600; // 14 days
+
+// CSRF guard: when Origin is present, require it to match our own origin.
+// Missing Origin is tolerated so internal forged requests
+// (worker.ts::handleNewResearch) and non-browser clients still work — modern
+// browsers always set Origin on cross-origin POST, so the practical CSRF
+// surface is covered. Comparing against request.url's origin (rather than a
+// hardcoded list) handles both prod (chrisputer.tech) and dev (localhost +
+// wrangler's route-simulation rewrites) without maintenance.
+const EXTRA_ALLOWED_ORIGINS: ReadonlyArray<string> = ['https://chrisputer.tech'];
+function isAllowedOrigin(request: Request): boolean {
+  const origin = request.headers.get('Origin');
+  if (!origin) return true;
+  try {
+    if (origin === new URL(request.url).origin) return true;
+  } catch { /* fall through */ }
+  return EXTRA_ALLOWED_ORIGINS.includes(origin);
+}
 
 async function findClusterMatch(db: D1Database, canonical: string): Promise<string | null> {
   if (!canonical) return null;
@@ -20,12 +38,7 @@ async function findClusterMatch(db: D1Database, canonical: string): Promise<stri
 // ─── POST /api/research ──────────────────────────────────────────────────────
 
 export async function handleResearchPost(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
-  // CSRF: verify Origin
-  const origin = request.headers.get('Origin');
-  const allowed = ['https://chrisputer.tech', 'http://localhost:8787'];
-  if (origin && !allowed.includes(origin)) {
-    return json({ error: 'Forbidden' }, 403);
-  }
+  if (!isAllowedOrigin(request)) return json({ error: 'Forbidden' }, 403);
 
   let body: { query?: string; tier?: string; turnstileToken?: string; fresh?: boolean };
   try {
@@ -55,16 +68,16 @@ export async function handleResearchPost(request: Request, env: Env, ctx: Execut
     return json({ error: 'This tier requires a subscription. Coming soon!' }, 403);
   }
 
+  // Per-tier rate limiting — compute clientIp first so Turnstile can use it too.
+  const clientIp = request.headers.get('CF-Connecting-IP') ?? 'unknown';
+
   // Turnstile verification for tiers that require it
   if (config.requireTurnstile && env.TURNSTILE_SECRET_KEY) {
     const token = typeof body.turnstileToken === 'string' ? body.turnstileToken : '';
-    if (!token || !(await verifyTurnstile(token, env.TURNSTILE_SECRET_KEY, '127.0.0.1'))) {
+    if (!token || !(await verifyTurnstile(token, env.TURNSTILE_SECRET_KEY, clientIp))) {
       return json({ error: 'CAPTCHA verification required for this tier.' }, 403);
     }
   }
-
-  // Per-tier rate limiting
-  const clientIp = request.headers.get('CF-Connecting-IP') ?? 'unknown';
   const rateLimitError = await checkRateLimit(env.DB, tier, clientIp);
   if (rateLimitError) {
     return json({ error: rateLimitError }, 429);
@@ -141,6 +154,7 @@ async function generatePreview(env: Env, researchId: string, query: string): Pro
       },
       body: JSON.stringify({
         model: 'anthropic/claude-haiku-4.5',
+        max_tokens: 300,
         messages: [
           {
             role: 'system',
@@ -154,7 +168,11 @@ async function generatePreview(env: Env, researchId: string, query: string): Pro
     const data = await response.json() as { choices?: Array<{ message?: { content?: string } }> };
     const text = data.choices?.[0]?.message?.content?.trim();
     if (!text) return;
-    await env.DB.prepare('UPDATE research SET preview = ?1 WHERE id = ?2').bind(text, researchId).run();
+    // Hard cap the stored payload — preview gets returned on every polling tick
+    // from /api/research/:slug/events during processing, so unbounded size
+    // inflates poll responses for every visitor watching the activity feed.
+    const capped = text.slice(0, 2000);
+    await env.DB.prepare('UPDATE research SET preview = ?1 WHERE id = ?2').bind(capped, researchId).run();
   } catch (e) {
     console.warn('[preview] generation failed:', e);
   }
@@ -163,7 +181,18 @@ async function generatePreview(env: Env, researchId: string, query: string): Pro
 export async function executeResearch(env: Env, researchId: string, query: string, tier: Tier, facets?: Facets, topicalCategory?: string | null): Promise<void> {
   const config = getTierConfig(tier);
 
-  await env.DB.prepare("UPDATE research SET status = 'processing' WHERE id = ?1").bind(researchId).run();
+  // Idempotency guard: only transition pending→processing. If the row is
+  // already processing (prior isolate still running? doesn't happen with
+  // max_batch_size=1 but defensive) or complete/failed (queue redelivery
+  // after success), skip the whole pipeline. Prevents double product
+  // inserts and KV cache pollution from stale reruns.
+  const claim = await env.DB.prepare(
+    "UPDATE research SET status = 'processing' WHERE id = ?1 AND status = 'pending'"
+  ).bind(researchId).run();
+  if ((claim.meta?.changes ?? 0) === 0) {
+    console.log(`[executeResearch] skip ${researchId} — not in pending state`);
+    return;
+  }
 
   // Kick off quick-answer preview in parallel with the full research.
   const previewPromise = generatePreview(env, researchId, query);
@@ -183,14 +212,27 @@ export async function executeResearch(env: Env, researchId: string, query: strin
     // Don't let a hung preview block the main flow, but don't leak it either.
     previewPromise.catch(() => {});
 
-    const affiliateTag = env.AMAZON_AFFILIATE_TAG || DEFAULT_AFFILIATE_TAG;
-    const walmartId = env.WALMART_IMPACT_ID;
+    const affiliateIds: AffiliateIds = {
+      amazonTag: env.AMAZON_AFFILIATE_TAG || DEFAULT_AFFILIATE_TAG,
+      walmartImpact: env.WALMART_IMPACT_ID || undefined,
+      targetImpact: env.IMPACT_TARGET_ID || undefined,
+      bestbuyImpact: env.IMPACT_BESTBUY_ID || undefined,
+      neweggImpact: env.IMPACT_NEWEGG_ID || undefined,
+      bhphoto: env.BHPHOTO_AFFILIATE_ID || undefined,
+    };
     const now = Math.floor(Date.now() / 1000);
+
+    // Defense-in-depth against the "retry after partial batch" race: clear any
+    // stale products for this research_id before we insert fresh ones. The
+    // idempotency guard above should prevent this path, but a DELETE here is
+    // cheap and locks out the edge case where a prior isolate inserted some
+    // products then crashed before the row flip.
+    const deleteStale = env.DB.prepare('DELETE FROM products WHERE research_id = ?1').bind(researchId);
 
     // Batch insert items. `metadata` absorbs any facet-specific key/value pairs
     // (address, hours, cuisine, etc.) that don't fit the buyable-product columns.
     const stmts = result.products.map((p) => {
-      const aUrl = p.productUrl ? sanitizeUrl(generateAffiliateUrl(p.productUrl, affiliateTag, walmartId)) : '';
+      const aUrl = p.productUrl ? buildAffiliateUrl(p.productUrl, affiliateIds) : '';
       const metadataJson = p.metadata && Object.keys(p.metadata).length > 0 ? JSON.stringify(p.metadata) : null;
       const imageUrl = p.imageUrl ? sanitizeUrl(p.imageUrl) : null;
       return env.DB.prepare(
@@ -211,7 +253,7 @@ export async function executeResearch(env: Env, researchId: string, query: strin
       JSON.stringify(sources.map((s) => s.url)), now, researchId,
     );
 
-    await env.DB.batch([...stmts, updateStmt]);
+    await env.DB.batch([deleteStale, ...stmts, updateStmt]);
   } catch (error) {
     console.error('Research failed:', error);
     try {
@@ -230,14 +272,25 @@ const RATE_LIMITS: Record<string, { windowSec: number; limit: number }> = {
   exhaustive: { windowSec: 86400, limit: 5 },   // 5/day per IP
 };
 
-async function checkRateLimit(db: D1Database, tier: Tier, ip: string): Promise<string | null> {
-  // Global safety valve: 60 researches/hour total
-  const oneHourAgo = Math.floor((Date.now() - 3_600_000) / 1000);
-  const globalCount = await db.prepare(
-    'SELECT COUNT(*) as cnt FROM research WHERE created_at > ?1'
-  ).bind(oneHourAgo).first<{ cnt: number }>();
+const GLOBAL_HOURLY_LIMIT = 60;
+const GLOBAL_IP_SENTINEL = '_global';
+const GLOBAL_ENDPOINT = 'research:all';
 
-  if ((globalCount?.cnt ?? 0) >= 60) {
+async function checkRateLimit(db: D1Database, tier: Tier, ip: string): Promise<string | null> {
+  // Global safety valve: 60 researches/hour total. Previously this did a
+  // COUNT(*) on the research table — O(N) scan. Now it increments a rolling
+  // counter in rate_limits using the same upsert mechanism as per-IP limits.
+  const globalWindow = Math.floor(Date.now() / 1000 / 3600) * 3600;
+  await db.prepare(
+    `INSERT INTO rate_limits (ip, endpoint, window_start, request_count)
+     VALUES (?1, ?2, ?3, 1)
+     ON CONFLICT(ip, endpoint, window_start)
+     DO UPDATE SET request_count = request_count + 1`
+  ).bind(GLOBAL_IP_SENTINEL, GLOBAL_ENDPOINT, globalWindow).run();
+  const globalRow = await db.prepare(
+    'SELECT request_count FROM rate_limits WHERE ip = ?1 AND endpoint = ?2 AND window_start = ?3'
+  ).bind(GLOBAL_IP_SENTINEL, GLOBAL_ENDPOINT, globalWindow).first<{ request_count: number }>();
+  if ((globalRow?.request_count ?? 0) > GLOBAL_HOURLY_LIMIT) {
     return 'Server is busy. Please try again in a few minutes.';
   }
 
@@ -267,8 +320,9 @@ async function checkRateLimit(db: D1Database, tier: Tier, ip: string): Promise<s
     return `Rate limit reached: ${cfg.limit} ${tier} researches per ${unit}. Try again later.`;
   }
 
-  // Lazy cleanup: ~1% of requests, clear entries older than 48h
-  if (Math.random() < 0.01) {
+  // Lazy cleanup: ~3% of requests, clear entries older than 48h. Bumped from
+  // 1% so low-traffic periods don't let the table grow unbounded for days.
+  if (Math.random() < 0.03) {
     const cutoff = Math.floor(Date.now() / 1000) - 172800;
     db.prepare('DELETE FROM rate_limits WHERE window_start < ?1').bind(cutoff).run().catch(() => {});
   }
@@ -361,6 +415,8 @@ function suggestJson(data: unknown): Response {
 // ─── POST /api/subscribe ────────────────────────────────────────────────────
 
 export async function handleSubscribe(request: Request, env: Env): Promise<Response> {
+  if (!isAllowedOrigin(request)) return json({ error: 'Forbidden' }, 403);
+
   let body: { email?: string; researchId?: string };
   try {
     body = await request.json();

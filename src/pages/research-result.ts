@@ -1,6 +1,7 @@
 import { type Env, type ResearchRow, type ItemRow, type BuyersGuide, DEFAULT_AFFILIATE_TAG } from '../types';
 import { layout, html, type LayoutMeta } from '../lib/html';
-import { parseJsonSafe, isValidHttpUrl, escapeHtml, timeAgo, displayQuery } from '../lib/utils';
+import { parseJsonSafe, isValidHttpsUrl, escapeHtml, timeAgo, displayQuery } from '../lib/utils';
+import { buildAffiliateUrl, retailerLabel, type AffiliateIds } from '../lib/affiliate';
 import { searchBar } from './home';
 import { adSlot } from '../lib/ads';
 
@@ -57,7 +58,7 @@ ${entries.map(([k, v]) => {
     const icon = METADATA_ICONS[k] ?? '&#9679;';
     const label = escapeHtml(labelForMetadataKey(k));
     // Render mapsUrl / URL-ish values as links when they look like URLs
-    const isUrl = /^https?:\/\//i.test(v) && isValidHttpUrl(v);
+    const isUrl = /^https?:\/\//i.test(v) && isValidHttpsUrl(v);
     const value = isUrl
       ? `<a href="${escapeHtml(v)}" target="_blank" rel="noopener noreferrer nofollow" style="color:var(--link)">${escapeHtml(new URL(v).hostname.replace(/^www\./, ''))}</a>`
       : escapeHtml(v);
@@ -82,96 +83,13 @@ function renderItemImage(imageUrl: string | null, name: string): string {
     'linear-gradient(135deg,#0c4a6e,#0284c7)',
   ];
   const fallback = `<div class="item-image-fallback" aria-hidden="true" style="width:100%;aspect-ratio:16/9;background:${gradients[colorIndex]};display:flex;align-items:center;justify-content:center;border-radius:8px;margin-bottom:.75rem"><span style="font-size:2.5rem;font-weight:800;color:rgba(255,255,255,.85);letter-spacing:-.02em">${letter}</span></div>`;
-  if (!imageUrl || !isValidHttpUrl(imageUrl)) return fallback;
-  // onerror swaps the <img> for the fallback div — broken hotlinks degrade gracefully.
-  const fallbackEscaped = fallback.replace(/"/g, '&quot;');
-  return `<img src="${escapeHtml(imageUrl)}" alt="${safeName}" loading="lazy" referrerpolicy="no-referrer" style="width:100%;aspect-ratio:16/9;object-fit:cover;border-radius:8px;margin-bottom:.75rem;background:var(--surface)" onerror="this.outerHTML=&quot;${fallbackEscaped}&quot;">`;
-}
-
-// Allowlist of retailer hostnames we recognize as "buy" destinations.
-// Anything else (review sites, manufacturer pages, blogs) renders WITHOUT a
-// buy CTA — we don't fabricate links to search results we can't vouch for.
-const BUY_HOSTS = [
-  'amazon.com',
-  'walmart.com',
-  'bestbuy.com',
-  'newegg.com',
-  'target.com',
-  'bhphotovideo.com',
-  'adorama.com',
-  'costco.com',
-  'microcenter.com',
-];
-
-interface AffiliateIds {
-  amazonTag: string;
-  walmartImpact?: string;
-  targetImpact?: string;
-  bestbuyImpact?: string;
-  neweggImpact?: string;
-  bhphoto?: string;
-}
-
-function buildAffiliateUrl(rawUrl: string, ids: AffiliateIds): string {
-  if (!rawUrl || !isValidHttpUrl(rawUrl)) return '';
-  try {
-    const parsed = new URL(rawUrl);
-    const host = parsed.hostname.replace(/^www\./, '');
-    // Reject retailer search-results URLs outright. The synthesis LLM sometimes
-    // fabricates amazon.com/s?k=ProductName when it doesn't know the real SKU;
-    // tagging a search URL and calling it "Buy on Amazon" is dishonest — we'd
-    // rather render no CTA at all. Same rule for other retailer search paths.
-    const path = parsed.pathname.toLowerCase();
-    if (host === 'amazon.com' || host.endsWith('.amazon.com')) {
-      if (path === '/s' || path.startsWith('/s/') || path === '/b') return '';
-      const u = new URL(rawUrl);
-      u.searchParams.set('tag', ids.amazonTag);
-      return u.toString();
-    }
-    // Walmart/Target/Best Buy search paths: /search, /s, /sp
-    if ((host === 'walmart.com' || host.endsWith('.walmart.com'))
-      && (path.startsWith('/search') || path === '/s')) return '';
-    if ((host === 'target.com' || host.endsWith('.target.com'))
-      && path.startsWith('/s/')) return '';
-    if ((host === 'bestbuy.com' || host.endsWith('.bestbuy.com'))
-      && path.startsWith('/site/searchpage')) return '';
-    // Amazon short links (amzn.to, a.co) can't embed our tag. Return empty so
-    // the caller renders no buy CTA — we won't fabricate a search URL.
-    if (host === 'amzn.to' || host === 'a.co') {
-      return '';
-    }
-    if (ids.walmartImpact && (host === 'walmart.com' || host.endsWith('.walmart.com'))) {
-      return `https://goto.walmart.com/c/${encodeURIComponent(ids.walmartImpact)}/s/1?u=${encodeURIComponent(rawUrl)}`;
-    }
-    // Target via Impact — same goto.<host> format as Walmart (standard Impact publisher link).
-    if (ids.targetImpact && (host === 'target.com' || host.endsWith('.target.com'))) {
-      return `https://goto.target.com/c/${encodeURIComponent(ids.targetImpact)}/s/1?u=${encodeURIComponent(rawUrl)}`;
-    }
-    // Best Buy via Impact. Uses bestbuy.7tiv.net rather than goto.* — the 7tiv
-    // subdomain is Impact's Best Buy-specific publisher-link domain.
-    if (ids.bestbuyImpact && (host === 'bestbuy.com' || host.endsWith('.bestbuy.com'))) {
-      return `https://bestbuy.7tiv.net/c/${encodeURIComponent(ids.bestbuyImpact)}/s/1?u=${encodeURIComponent(rawUrl)}`;
-    }
-    // Newegg via Impact — same goto pattern.
-    if (ids.neweggImpact && (host === 'newegg.com' || host.endsWith('.newegg.com'))) {
-      return `https://goto.newegg.com/c/${encodeURIComponent(ids.neweggImpact)}/s/1?u=${encodeURIComponent(rawUrl)}`;
-    }
-    // B&H Photo Partner Program — direct deeplink with `?BI={id}&A={id}` params.
-    // B&H's partner tool builds these URLs; format matches their documented deeplink spec.
-    if (ids.bhphoto && (host === 'bhphotovideo.com' || host.endsWith('.bhphotovideo.com'))) {
-      const u = new URL(rawUrl);
-      u.searchParams.set('BI', ids.bhphoto);
-      return u.toString();
-    }
-    // Known retailer (non-affiliate) — keep the URL as-is; no tag to inject.
-    if (BUY_HOSTS.some((h) => host === h || host.endsWith(`.${h}`))) {
-      return rawUrl;
-    }
-    // Unknown host (review site, blog, manufacturer) — reject so caller falls back to Amazon search.
-    return '';
-  } catch {
-    return '';
-  }
+  if (!imageUrl || !isValidHttpsUrl(imageUrl)) return fallback;
+  // Broken hotlinks degrade gracefully: emit img + sibling fallback; a page-
+  // level script swaps them on 'error'. Replaces the old inline onerror= that
+  // was incompatible with nonce-based CSP.
+  const hiddenFallback = fallback.replace('class="item-image-fallback"', 'class="item-image-fallback" hidden');
+  return `<img class="item-image-photo" src="${escapeHtml(imageUrl)}" alt="${safeName}" loading="lazy" referrerpolicy="no-referrer" style="width:100%;aspect-ratio:16/9;object-fit:cover;border-radius:8px;margin-bottom:.75rem;background:var(--surface)">
+${hiddenFallback}`;
 }
 
 // Categories where "Buy on Amazon" is nonsensical — services, local professionals,
@@ -278,19 +196,6 @@ async function getRelatedResearch(
   return deduped;
 }
 
-function retailerLabel(url: string): string {
-  try {
-    const host = new URL(url).hostname.replace('www.', '').replace('goto.', '');
-    if (host.includes('amazon')) return 'Amazon';
-    if (host.includes('walmart')) return 'Walmart';
-    if (host.includes('bestbuy')) return 'Best Buy';
-    if (host.includes('newegg')) return 'Newegg';
-    if (host.includes('target')) return 'Target';
-    if (host.includes('bhphoto') || host.includes('adorama')) return 'B&H Photo';
-    return host.split('.')[0].charAt(0).toUpperCase() + host.split('.')[0].slice(1);
-  } catch { return 'Retailer'; }
-}
-
 function renderProduct(p: ItemRow, index: number, ids: AffiliateIds, isService: boolean): string {
   const pros = parseJsonSafe<string[]>(p.pros, []);
   const cons = parseJsonSafe<string[]>(p.cons, []);
@@ -299,7 +204,7 @@ function renderProduct(p: ItemRow, index: number, ids: AffiliateIds, isService: 
   const rankClass = p.rank === 1 ? 'rank-1' : p.rank === 2 ? 'rank-2' : p.rank === 3 ? 'rank-3' : 'rank-n';
 
   // Manufacturer product page (non-affiliate, informational)
-  const mfrUrl = p.manufacturer_url && isValidHttpUrl(p.manufacturer_url) ? p.manufacturer_url : '';
+  const mfrUrl = p.manufacturer_url && isValidHttpsUrl(p.manufacturer_url) ? p.manufacturer_url : '';
 
   // Buy/visit link. We ONLY render a CTA when we have a real retailer URL we can
   // tag — no Amazon-search fallback. A search-results page isn't a buy link; it
@@ -312,7 +217,7 @@ function renderProduct(p: ItemRow, index: number, ids: AffiliateIds, isService: 
   let ctaIsSponsored = true;
 
   if (isService) {
-    const serviceUrl = (mfrUrl || (buyRaw && isValidHttpUrl(buyRaw) ? buyRaw : ''));
+    const serviceUrl = (mfrUrl || (buyRaw && isValidHttpsUrl(buyRaw) ? buyRaw : ''));
     if (serviceUrl) {
       ctaUrl = serviceUrl;
       ctaLabel = 'Visit site';
@@ -336,7 +241,7 @@ function renderProduct(p: ItemRow, index: number, ids: AffiliateIds, isService: 
   if (mfrUrl && !(isService && ctaUrl === mfrUrl)) {
     links.push(`<a href="${escapeHtml(mfrUrl)}" target="_blank" rel="noopener noreferrer" class="product-link product-link-mfr">Product page <span aria-hidden="true">&#8599;</span></a>`);
   }
-  if (ctaUrl && isValidHttpUrl(ctaUrl)) {
+  if (ctaUrl && isValidHttpsUrl(ctaUrl)) {
     const cls = ctaIsSponsored ? 'product-link product-link-buy' : 'product-link product-link-mfr';
     links.push(`<a href="${escapeHtml(ctaUrl)}" target="_blank" rel="${ctaRel}" class="${cls}">${escapeHtml(ctaLabel)} <span aria-hidden="true">&#8599;</span></a>`);
   }
@@ -398,7 +303,7 @@ export async function renderResearchResult(slug: string, env: Env, fromQuery: st
   const buyersGuide = resultData.buyersGuide;
   const hasBuyersGuide = !!(buyersGuide && (buyersGuide.howToChoose || (buyersGuide.pitfalls?.length ?? 0) > 0 || (buyersGuide.marketingToIgnore?.length ?? 0) > 0));
   const isService = isNonProductCategory(entry.category);
-  const sourceList = parseJsonSafe<string[]>(entry.sources, []).filter(isValidHttpUrl);
+  const sourceList = parseJsonSafe<string[]>(entry.sources, []).filter(isValidHttpsUrl);
 
   const date = new Date(entry.created_at * 1000).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
   const createdIso = new Date(entry.created_at * 1000).toISOString().slice(0, 10);
@@ -439,7 +344,7 @@ ${entry.status === 'complete' ? `<div class="share-bar">
 <span>Share:</span>
 <a href="https://twitter.com/intent/tweet?text=${shareText}&url=${shareUrl}" target="_blank" rel="noopener noreferrer" class="share-btn"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>Post</a>
 <a href="https://reddit.com/submit?url=${shareUrl}&title=${shareText}" target="_blank" rel="noopener noreferrer" class="share-btn"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 0A12 12 0 000 12a12 12 0 0012 12 12 12 0 0012-12A12 12 0 0012 0zm5.01 4.744c.688 0 1.25.561 1.25 1.249a1.25 1.25 0 01-2.498.056l-2.597-.547-.8 3.747c1.824.07 3.48.632 4.674 1.488.308-.309.73-.491 1.207-.491.968 0 1.754.786 1.754 1.754 0 .716-.435 1.333-1.01 1.614a3.111 3.111 0 01.042.52c0 2.694-3.13 4.87-7.004 4.87-3.874 0-7.004-2.176-7.004-4.87 0-.183.015-.366.043-.534A1.748 1.748 0 014.028 12c0-.968.786-1.754 1.754-1.754.463 0 .898.196 1.207.49 1.207-.883 2.878-1.43 4.744-1.487l.885-4.182a.342.342 0 01.14-.197.35.35 0 01.238-.042l2.906.617a1.214 1.214 0 011.108-.701zM9.25 12C8.561 12 8 12.562 8 13.25c0 .687.561 1.248 1.25 1.248.687 0 1.248-.561 1.248-1.249 0-.688-.561-1.249-1.249-1.249zm5.5 0c-.687 0-1.248.561-1.248 1.25 0 .687.561 1.248 1.249 1.248.688 0 1.249-.561 1.249-1.249 0-.687-.562-1.249-1.25-1.249zm-5.466 3.99a.327.327 0 00-.231.094.33.33 0 000 .463c.842.842 2.484.913 2.961.913.477 0 2.105-.056 2.961-.913a.361.361 0 000-.463.327.327 0 00-.464 0c-.547.533-1.684.73-2.512.73-.828 0-1.979-.196-2.512-.73a.326.326 0 00-.232-.095z"/></svg>Reddit</a>
-<button type="button" onclick="navigator.clipboard.writeText('${pageUrl}');this.textContent='Copied!';var b=this;setTimeout(function(){b.innerHTML='<svg viewBox=&quot;0 0 24 24&quot; fill=&quot;none&quot; stroke=&quot;currentColor&quot; style=&quot;width:14px;height:14px&quot; aria-hidden=&quot;true&quot;><path stroke-linecap=&quot;round&quot; stroke-linejoin=&quot;round&quot; stroke-width=&quot;2&quot; d=&quot;M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3&quot;/></svg>Copy link'},2000)" class="share-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3"/></svg>Copy link</button>
+<button type="button" class="share-btn js-copy-link" data-url="${pageUrl}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3"/></svg>Copy link</button>
 </div>` : ''}
 </div>
 
@@ -467,7 +372,7 @@ ${isProcessing ? `<div id="processing" style="padding:1.5rem;background:var(--su
 <p style="font-size:.85rem;font-weight:500;margin-bottom:.5rem;color:var(--text2)">Get notified when this research is ready:</p>
 <div style="display:flex;gap:.5rem">
 <input type="email" id="notify-email" placeholder="your@email.com" style="flex:1;padding:.5rem .75rem;border-radius:8px;border:1px solid var(--surface2);background:var(--surface);color:var(--text);font-size:.85rem;font-family:var(--font);outline:none" aria-label="Email for notification">
-<button type="button" id="notify-btn" onclick="var e=document.getElementById('notify-email'),b=this;if(!e.value||!e.value.includes('@'))return;b.disabled=true;b.textContent='...';fetch('/api/subscribe',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:e.value,researchId:'${escapeHtml(entry.id)}'})}).then(function(r){return r.json()}).then(function(d){if(d.ok){b.textContent='Subscribed!';e.disabled=true}else{b.textContent=d.error||'Error';b.disabled=false}}).catch(function(){b.textContent='Error';b.disabled=false})" class="btn" style="font-size:.85rem;padding:.5rem 1rem;white-space:nowrap">Notify me</button>
+<button type="button" id="notify-btn" data-research-id="${escapeHtml(entry.id)}" class="btn" style="font-size:.85rem;padding:.5rem 1rem;white-space:nowrap">Notify me</button>
 </div>
 </div>
 </div>` : ''}
@@ -641,9 +546,9 @@ ${searchBar('compact', env.TURNSTILE_SITE_KEY)}
   });
 
   const structuredData = entry.status === 'complete'
-    ? `<script type="application/ld+json">${jsonLd}</script>` +
-      (itemListLd ? `<script type="application/ld+json">${itemListLd}</script>` : '') +
-      `<script type="application/ld+json">${breadcrumbLd}</script>`
+    ? `<script type="application/ld+json" nonce="__CSP_NONCE__">${jsonLd}</script>` +
+      (itemListLd ? `<script type="application/ld+json" nonce="__CSP_NONCE__">${itemListLd}</script>` : '') +
+      `<script type="application/ld+json" nonce="__CSP_NONCE__">${breadcrumbLd}</script>`
     : '';
 
   const layoutMeta: LayoutMeta = {
@@ -661,11 +566,62 @@ ${searchBar('compact', env.TURNSTILE_SITE_KEY)}
   };
 
   const turnstileScript = env.TURNSTILE_SITE_KEY
-    ? '<script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>'
+    ? '<script nonce="__CSP_NONCE__" src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>'
     : '';
+
+  // Always-on wiring: copy-link buttons + image fallback swap on error. These
+  // replace the old inline onclick/onerror handlers that nonce-based CSP
+  // refuses to execute.
+  const pageBehaviorScript = `<script nonce="__CSP_NONCE__">
+(function(){
+  function wireCopy(){
+    document.querySelectorAll('.js-copy-link').forEach(function(btn){
+      if(btn.__wired)return;btn.__wired=true;
+      var original=btn.innerHTML;
+      btn.addEventListener('click',function(){
+        var url=btn.dataset.url||'';
+        if(!url||!navigator.clipboard)return;
+        navigator.clipboard.writeText(url).then(function(){
+          btn.textContent='Copied!';
+          setTimeout(function(){btn.innerHTML=original},2000);
+        });
+      });
+    });
+  }
+  function wireImages(){
+    document.querySelectorAll('.item-image-photo').forEach(function(img){
+      if(img.__wired)return;img.__wired=true;
+      img.addEventListener('error',function(){
+        img.hidden=true;
+        var fb=img.nextElementSibling;
+        if(fb&&fb.classList.contains('item-image-fallback'))fb.hidden=false;
+      });
+    });
+  }
+  function run(){wireCopy();wireImages()}
+  if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',run)}else{run()}
+  // Expose for post-swap rewiring after the activity feed completes a research.
+  window.__rewire=run;
+})();
+</script>`;
+
   const activityFeedScript = `<noscript><meta http-equiv="refresh" content="10"></noscript>
-<script>
+<script nonce="__CSP_NONCE__">
 document.addEventListener('DOMContentLoaded',function(){
+  // Notify button wiring (replaces the old inline onclick=).
+  var nb=document.getElementById('notify-btn');
+  if(nb){
+    nb.addEventListener('click',function(){
+      var e=document.getElementById('notify-email');
+      if(!e||!e.value||!e.value.includes('@'))return;
+      nb.disabled=true;nb.textContent='...';
+      fetch('/api/subscribe',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:e.value,researchId:nb.dataset.researchId||''})})
+        .then(function(r){return r.json()})
+        .then(function(d){if(d.ok){nb.textContent='Subscribed!';e.disabled=true}else{nb.textContent=d.error||'Error';nb.disabled=false}})
+        .catch(function(){nb.textContent='Error';nb.disabled=false});
+    });
+  }
+
   var feed=document.getElementById('activity-feed');
   var counter=document.getElementById('source-count');
   if(!feed)return;
@@ -701,7 +657,8 @@ document.addEventListener('DOMContentLoaded',function(){
         }
         if(d.status==='complete'){
           // In-place swap: fetch the now-rendered page, splice in .container content.
-          // Falls back to reload if anything goes wrong.
+          // Falls back to reload if anything goes wrong. Also re-wires inline
+          // handlers on the freshly-inserted DOM via window.__rewire.
           fetch(location.pathname,{cache:'no-store'})
             .then(function(r){return r.text()})
             .then(function(html){
@@ -713,6 +670,7 @@ document.addEventListener('DOMContentLoaded',function(){
                 if(fresh&&current){
                   current.replaceWith(fresh);
                   document.title=doc.title;
+                  if(typeof window.__rewire==='function')window.__rewire();
                   window.scrollTo({top:0,behavior:'smooth'});
                 }else{location.reload()}
               }catch(e){location.reload()}
@@ -733,7 +691,7 @@ document.addEventListener('DOMContentLoaded',function(){
   poll();
 });
 </script>`;
-  const extra = isProcessing ? activityFeedScript : '';
+  const extra = pageBehaviorScript + (isProcessing ? activityFeedScript : '');
   const canonical = `<link rel="canonical" href="https://chrisputer.tech/research/${escapeHtml(slug)}">`;
   // Keep thin (zero-product) and failed pages out of the index. Direct links still work.
   const isThin = entry.status === 'complete' && products.length === 0;

@@ -100,7 +100,7 @@ export function layout(title: string, description: string, body: string, extra_h
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" media="print" onload="this.media='all'">
+<link rel="stylesheet" id="font-stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" media="print">
 <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap"></noscript>
 <style>${CSS}</style>
 ${extra_head}
@@ -110,7 +110,7 @@ ${extra_head}
 <nav aria-label="Main navigation">
 <div class="nav-inner">
 <a href="/" class="logo"><span class="logo-mark">CL</span> Chrisputer Labs</a>
-<button type="button" class="nav-toggle" aria-label="Toggle menu" aria-expanded="false" aria-controls="nav-links" onclick="const n=this.nextElementSibling;const o=n.classList.toggle('open');this.setAttribute('aria-expanded',o)">
+<button type="button" class="nav-toggle" aria-label="Toggle menu" aria-expanded="false" aria-controls="nav-links">
 <span></span><span></span><span></span>
 </button>
 <div class="nav-links" id="nav-links">
@@ -119,8 +119,21 @@ ${extra_head}
 </div>
 </div>
 </nav>
-<script>
-(function(){var t=document.querySelector('.nav-toggle'),l=document.getElementById('nav-links');if(!t||!l)return;function close(){l.classList.remove('open');t.setAttribute('aria-expanded','false')}document.addEventListener('click',function(e){if(!l.classList.contains('open'))return;if(t.contains(e.target)||l.contains(e.target))return;close()});document.addEventListener('keydown',function(e){if(e.key==='Escape'&&l.classList.contains('open')){close();t.focus()}});l.querySelectorAll('a').forEach(function(a){a.addEventListener('click',close)})})();
+<script nonce="__CSP_NONCE__">
+(function(){
+// Font stylesheet swap to non-blocking 'all' once loaded. Replaces inline
+// onload= on the <link> tag (which CSP with nonces refuses to execute).
+var fs=document.getElementById('font-stylesheet');
+if(fs){if(fs.sheet){fs.media='all'}else{fs.addEventListener('load',function(){fs.media='all'})}}
+// Nav toggle. Replaces the onclick= that used to live on the button.
+var t=document.querySelector('.nav-toggle'),l=document.getElementById('nav-links');
+if(!t||!l)return;
+function close(){l.classList.remove('open');t.setAttribute('aria-expanded','false')}
+t.addEventListener('click',function(){var o=l.classList.toggle('open');t.setAttribute('aria-expanded',String(o))});
+document.addEventListener('click',function(e){if(!l.classList.contains('open'))return;if(t.contains(e.target)||l.contains(e.target))return;close()});
+document.addEventListener('keydown',function(e){if(e.key==='Escape'&&l.classList.contains('open')){close();t.focus()}});
+l.querySelectorAll('a').forEach(function(a){a.addEventListener('click',close)});
+})();
 </script>
 <main id="main">${body}</main>
 <footer>

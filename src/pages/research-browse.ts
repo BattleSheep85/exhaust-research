@@ -1,6 +1,6 @@
 import type { Env, ResearchRow } from '../types';
 import { layout } from '../lib/html';
-import { timeAgo, escapeHtml, escapeLikeWildcards, displayQuery } from '../lib/utils';
+import { timeAgo, escapeHtml, escapeLikeWildcards, displayQuery, publicResearchFilter } from '../lib/utils';
 import { searchBar } from './home';
 
 export async function renderBrowse(url: URL, env: Env): Promise<string> {
@@ -17,10 +17,7 @@ export async function renderBrowse(url: URL, env: Env): Promise<string> {
       `WITH ranked AS (
          SELECT r.*, ROW_NUMBER() OVER (PARTITION BY COALESCE(r.canonical_query, r.slug) ORDER BY r.created_at DESC) AS rn
          FROM research r
-         WHERE r.status = 'complete' AND r.query LIKE ?1
-           AND EXISTS (SELECT 1 FROM products p WHERE p.research_id = r.id)
-           AND LENGTH(r.query) >= 10 AND r.query LIKE '% %'
-           AND r.query NOT LIKE 'test %' AND r.query NOT LIKE 'verify %'
+         WHERE ${publicResearchFilter('r')} AND r.query LIKE ?1
        )
        SELECT *, (SELECT COUNT(*) FROM products WHERE products.research_id = ranked.id) AS product_count
        FROM ranked WHERE rn = 1
@@ -32,10 +29,7 @@ export async function renderBrowse(url: URL, env: Env): Promise<string> {
       `WITH ranked AS (
          SELECT r.*, ROW_NUMBER() OVER (PARTITION BY COALESCE(r.canonical_query, r.slug) ORDER BY r.created_at DESC) AS rn
          FROM research r
-         WHERE r.status = 'complete'
-           AND EXISTS (SELECT 1 FROM products p WHERE p.research_id = r.id)
-           AND LENGTH(r.query) >= 10 AND r.query LIKE '% %'
-           AND r.query NOT LIKE 'test %' AND r.query NOT LIKE 'verify %'
+         WHERE ${publicResearchFilter('r')}
        )
        SELECT *, (SELECT COUNT(*) FROM products WHERE products.research_id = ranked.id) AS product_count
        FROM ranked WHERE rn = 1
@@ -96,7 +90,7 @@ ${hasMore ? `<a href="/research?page=${page + 1}${qs}" class="btn btn-ghost">Nex
   const nextLink = hasMore ? `<link rel="next" href="https://chrisputer.tech/research?page=${page + 1}${qs}">` : '';
   const noindex = (page > 1 || searchQuery) ? '<meta name="robots" content="noindex, follow">' : '';
   const turnstileScript = env.TURNSTILE_SITE_KEY
-    ? '<script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>'
+    ? '<script nonce="__CSP_NONCE__" src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>'
     : '';
 
   const breadcrumbLd = JSON.stringify({
@@ -134,8 +128,8 @@ ${hasMore ? `<a href="/research?page=${page + 1}${qs}" class="btn btn-ghost">Nex
       })),
     },
   }) : '';
-  const structuredData = `<script type="application/ld+json">${breadcrumbLd}</script>` +
-    (itemListLd ? `<script type="application/ld+json">${itemListLd}</script>` : '');
+  const structuredData = `<script type="application/ld+json" nonce="__CSP_NONCE__">${breadcrumbLd}</script>` +
+    (itemListLd ? `<script type="application/ld+json" nonce="__CSP_NONCE__">${itemListLd}</script>` : '');
 
   return layout('Browse Research', 'Explore past AI-powered product research.', body, canonical + prevLink + nextLink + noindex + turnstileScript + structuredData, { ogUrl: 'https://chrisputer.tech/research' });
 }

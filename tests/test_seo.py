@@ -26,7 +26,8 @@ def run(base: str) -> Suite:
     @case(s, "Home has valid WebSite JSON-LD")
     def _():
         html = sess.get(f"{base}/").text
-        m = re.search(r'<script type="application/ld\+json">(\{[^<]*?"WebSite"[^<]*?\})</script>', html)
+        # Script tag now carries a CSP nonce — regex accepts optional nonce attr.
+        m = re.search(r'<script type="application/ld\+json"(?:\s+nonce="[a-f0-9]+")?>(\{[^<]*?"WebSite"[^<]*?\})</script>', html)
         assert m, "no WebSite JSON-LD found"
         data = json.loads(m.group(1))
         assert data["@type"] == "WebSite"
@@ -46,7 +47,12 @@ def run(base: str) -> Suite:
     @case(s, "Sitemap lists at least homepage + browse + about")
     def _():
         xml = sess.get(f"{base}/sitemap.xml").text
-        assert "<loc>https://chrisputer.tech/</loc>" in xml or f"<loc>{base}/</loc>" in xml
+        # Wrangler dev rewrites scheme to http://chrisputer.tech when simulating
+        # the configured zone. Accept prod https, dev localhost, or the rewritten
+        # dev variant.
+        assert any(f"<loc>{origin}/</loc>" in xml for origin in [
+            "https://chrisputer.tech", base, "http://chrisputer.tech"
+        ])
         assert "/research</loc>" in xml
         assert "/about</loc>" in xml
         return True

@@ -1,18 +1,25 @@
-import type { Env, Tier } from './types';
-import { renderHome, searchBar } from './pages/home';
+import type { Env, Tier, ResearchJobMessage } from './types';
+import { renderHome } from './pages/home';
 import { renderResearchResult } from './pages/research-result';
 import { renderBrowse } from './pages/research-browse';
 import { renderAbout } from './pages/about';
 import { handleResearchPost, handleResearchEvents, handleSearchSuggest, handleSubscribe, verifyTurnstile, executeResearch } from './pages/api';
-import type { ResearchJobMessage } from './types';
-import { escapeHtml, displayQuery } from './lib/utils';
-import { layout } from './lib/html';
 import { getTierConfig, isValidTier } from './lib/research-config';
+import {
+  FAVICON_SVG, OG_IMAGE_SVG, manifestJson, opensearchXml,
+  HUMANS_TXT, BROWSERCONFIG_XML, adsTxt, robotsTxt,
+  isBotUserAgent, isScannerProbe,
+} from './lib/static-assets';
+import { getLatestResearchLastmod, generateSitemap, generateAtomFeed, generateOgImage } from './lib/sitemap-feed';
+import {
+  renderNotFoundResearch, renderGeneric404, render500,
+  renderVerificationFailed, renderRejected, renderRateLimited, renderResearchError,
+} from './lib/error-pages';
 
 // Bump when the page template/schema shape changes in a way that should
 // invalidate every cached HTML blob. Old keys age out on their own TTL
 // (home: 5m, research result: 1h) so bumping is a soft cutover, not a purge.
-const CACHE_VERSION = 'v41';
+const CACHE_VERSION = 'v42';
 
 // Update when /about page content materially changes. Signals freshness to
 // crawlers so the page gets re-crawled after structured-data or copy edits.
@@ -20,9 +27,7 @@ const ABOUT_LASTMOD = '2026-04-14';
 
 // Baseline security headers applied to every response (HTML, JSON, redirects,
 // static assets). HTML pages add a stricter CSP on top in htmlResponse(); these
-// are the universal defaults that should never be missing — previously API
-// responses had none of these, leaving JSON endpoints without HSTS/nosniff/
-// frame protection.
+// are the universal defaults that should never be missing.
 const BASELINE_SECURITY_HEADERS: Record<string, string> = {
   'Strict-Transport-Security': 'max-age=31536000; includeSubDomains',
   'X-Content-Type-Options': 'nosniff',
@@ -60,9 +65,34 @@ export default {
         await executeResearch(env, researchId, query, tier, facets, topicalCategory ?? null);
         msg.ack();
       } catch (err) {
-        console.error('[queue] research job failed:', researchId, err);
+        // Structured log so DLQ triage has query + tier context, not just the id.
+        console.error(JSON.stringify({
+          where: 'queue-consumer',
+          researchId,
+          query,
+          tier,
+          attempts: msg.attempts,
+          error: err instanceof Error ? err.message : String(err),
+        }));
         msg.retry();
       }
+    }
+  },
+  // Scheduled: reap rows stuck in 'processing' longer than ~20 min. Covers the
+  // edge case where the queue consumer crashed mid-pipeline AFTER flipping
+  // status but BEFORE the final UPDATE — without this, the row stays
+  // 'processing' forever and the public page shows a spinner that never
+  // resolves. Wired to a cron_triggers entry in wrangler.jsonc (*/10 * * * *).
+  async scheduled(_event: ScheduledEvent, env: Env, _ctx: ExecutionContext): Promise<void> {
+    const cutoff = Math.floor(Date.now() / 1000) - 20 * 60;
+    try {
+      const result = await env.DB.prepare(
+        "UPDATE research SET status = 'failed' WHERE status = 'processing' AND created_at < ?1"
+      ).bind(cutoff).run();
+      const reaped = result.meta?.changes ?? 0;
+      if (reaped > 0) console.log(JSON.stringify({ where: 'scheduled-reap', reaped, cutoff }));
+    } catch (err) {
+      console.error(JSON.stringify({ where: 'scheduled-reap', error: err instanceof Error ? err.message : String(err) }));
     }
   },
 } satisfies ExportedHandler<Env>;
@@ -73,14 +103,8 @@ async function handleRequest(request: Request, env: Env, ctx: ExecutionContext):
     const at = env.CF_ANALYTICS_TOKEN;
     const adPub = env.ADSENSE_PUBLISHER_ID;
 
-    // 301 redirect old subdomain to apex domain
-    if (url.hostname === 'research.chrisputer.tech') {
-      const dest = new URL(url.pathname + url.search, 'https://chrisputer.tech');
-      return Response.redirect(dest.toString(), 301);
-    }
-
-    // www → apex redirect
-    if (url.hostname === 'www.chrisputer.tech') {
+    // Legacy subdomain / www redirects
+    if (url.hostname === 'research.chrisputer.tech' || url.hostname === 'www.chrisputer.tech') {
       const dest = new URL(url.pathname + url.search, 'https://chrisputer.tech');
       return Response.redirect(dest.toString(), 301);
     }
@@ -91,10 +115,8 @@ async function handleRequest(request: Request, env: Env, ctx: ExecutionContext):
       return Response.redirect(dest.toString(), 301);
     }
 
-    // Fast-fail for known scanner/bot probes. These paths have zero legitimate
-    // use on this site (we don't run PHP, WordPress, Git, etc.) — returning a
-    // tiny text/plain 404 saves ~20KB of HTML-404 rendering per probe and
-    // reduces CF egress from drive-by vulnerability scanners.
+    // Fast-fail for known scanner/bot probes. Saves ~20KB of HTML-404 rendering
+    // per probe and reduces CF egress from drive-by vulnerability scanners.
     if (isScannerProbe(path)) {
       return new Response('Not Found', {
         status: 404,
@@ -103,152 +125,77 @@ async function handleRequest(request: Request, env: Env, ctx: ExecutionContext):
     }
 
     try {
-      // Static files
+      // ── Static assets ────────────────────────────────────────────────────
       if (path === '/favicon.svg') {
         return new Response(FAVICON_SVG, { headers: { 'Content-Type': 'image/svg+xml', 'Cache-Control': 'public, max-age=86400' } });
       }
-
-      // Browsers and unfurlers request these convention paths regardless of
-      // the <link rel="icon"> tag. Without these, every request 404s with a
-      // ~20KB error page (huge waste, dirties analytics). All modern targets
-      // support SVG favicons, so 301 to the canonical SVG.
       if (path === '/favicon.ico' || path === '/apple-touch-icon.png' || path === '/apple-touch-icon-precomposed.png') {
         return new Response(null, {
           status: 301,
-          headers: {
-            Location: '/favicon.svg',
-            'Cache-Control': 'public, max-age=2592000, immutable',
-          },
+          headers: { Location: '/favicon.svg', 'Cache-Control': 'public, max-age=2592000, immutable' },
         });
       }
-
-      // Legacy / alternate manifest paths. Some tools and older Android
-      // browsers look for /manifest.json or /site.webmanifest. 301 to the
-      // canonical webmanifest so they don't hit the 20KB 404 page.
       if (path === '/manifest.json' || path === '/site.webmanifest') {
         return new Response(null, {
           status: 301,
-          headers: {
-            Location: '/manifest.webmanifest',
-            'Cache-Control': 'public, max-age=2592000, immutable',
-          },
+          headers: { Location: '/manifest.webmanifest', 'Cache-Control': 'public, max-age=2592000, immutable' },
         });
       }
-
       if (path === '/og-image.svg') {
         return new Response(OG_IMAGE_SVG, { headers: { 'Content-Type': 'image/svg+xml', 'Cache-Control': 'public, max-age=86400' } });
       }
-
       if (path === '/opensearch.xml') {
-        const xml = `<?xml version="1.0" encoding="UTF-8"?>
-<OpenSearchDescription xmlns="http://a9.com/-/spec/opensearch/1.1/">
-<ShortName>Chrisputer</ShortName>
-<LongName>Chrisputer Labs</LongName>
-<Description>AI-powered product research by Chrisputer Labs.</Description>
-<InputEncoding>UTF-8</InputEncoding>
-<Image width="32" height="32" type="image/svg+xml">${url.origin}/favicon.svg</Image>
-<Url type="text/html" method="get" template="${url.origin}/research?q={searchTerms}"/>
-<Url type="application/opensearchdescription+xml" rel="self" template="${url.origin}/opensearch.xml"/>
-<Query role="example" searchTerms="best mesh wifi"/>
-<Developer>Chrisputer Labs</Developer>
-<moz:SearchForm xmlns:moz="http://www.mozilla.org/2006/browser/search/">${url.origin}/research</moz:SearchForm>
-</OpenSearchDescription>`;
-        return new Response(xml, {
+        return new Response(opensearchXml(url.origin), {
           headers: { 'Content-Type': 'application/opensearchdescription+xml', 'Cache-Control': 'public, max-age=86400' },
         });
       }
-
       if (path === '/manifest.webmanifest') {
-        const manifest = {
-          id: '/',
-          name: 'Chrisputer Labs',
-          short_name: 'Chrisputer',
-          description: 'AI-powered product research backed by 20 years of IT expertise.',
-          start_url: '/',
-          scope: '/',
-          display: 'standalone',
-          orientation: 'portrait-primary',
-          lang: 'en-US',
-          dir: 'ltr',
-          categories: ['productivity', 'shopping', 'utilities'],
-          background_color: '#020617',
-          theme_color: '#2563eb',
-          icons: [{ src: '/favicon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any' }],
-        };
-        return new Response(JSON.stringify(manifest), {
+        return new Response(manifestJson(), {
           headers: { 'Content-Type': 'application/manifest+json', 'Cache-Control': 'public, max-age=86400' },
         });
       }
-
       if (path === '/robots.txt') {
-        return new Response(`User-agent: *\nAllow: /\nDisallow: /api/\nDisallow: /research/new\n\nSitemap: ${url.origin}/sitemap.xml`, {
+        return new Response(robotsTxt(url.origin), {
           headers: { 'Content-Type': 'text/plain', 'Cache-Control': 'public, max-age=86400' },
         });
       }
-
-      // Convention paths that browsers, scanners, and link checkers probe.
-      // Returning tiny real bodies is kinder than the 20KB HTML 404.
       if (path === '/humans.txt') {
-        const body = `/* TEAM */\nChris\nTitle: Creator\nSite: https://chrisputer.tech/about\n\n/* SITE */\nLanguage: English\nDoctype: HTML5\nBuilt on: Cloudflare Workers, D1, OpenRouter\nBuilt with: Pure TypeScript, zero npm dependencies\n`;
-        return new Response(body, {
+        return new Response(HUMANS_TXT, {
           headers: { 'Content-Type': 'text/plain;charset=utf-8', 'Cache-Control': 'public, max-age=86400' },
         });
       }
-
-      // IE11 / legacy Edge Start Menu tile config. Kept minimal — the tile is a
-      // deprecated surface but browsers still probe the path.
       if (path === '/browserconfig.xml') {
-        const body = `<?xml version="1.0" encoding="utf-8"?>\n<browserconfig><msapplication><tile><square150x150logo src="/favicon.svg"/><TileColor>#2563eb</TileColor></tile></msapplication></browserconfig>`;
-        return new Response(body, {
+        return new Response(BROWSERCONFIG_XML, {
           headers: { 'Content-Type': 'application/xml', 'Cache-Control': 'public, max-age=86400' },
         });
       }
-
       if (path === '/ads.txt') {
-        const pubId = env.ADSENSE_PUBLISHER_ID;
-        const body = pubId
-          ? `google.com, ${pubId}, DIRECT, f08c47fec0942fa0`
-          : '';
-        return new Response(body, {
+        return new Response(adsTxt(env.ADSENSE_PUBLISHER_ID), {
           headers: { 'Content-Type': 'text/plain', 'Cache-Control': 'public, max-age=86400' },
         });
       }
-
       if (path === '/sitemap.xml') {
-        return generateSitemap(url.origin, env, request.headers.get('If-Modified-Since'));
+        return generateSitemap(url.origin, env, request.headers.get('If-Modified-Since'), ABOUT_LASTMOD);
       }
-
       if (path === '/feed.xml') {
         return generateAtomFeed(url.origin, env, request.headers.get('If-Modified-Since'));
       }
 
-      // API routes. Treat HEAD as GET for read-only endpoints so monitors and
-      // link checkers get the right status — body is stripped by the outer
-      // wrapper for HEAD requests.
+      // ── API routes ───────────────────────────────────────────────────────
       const isGetLike = request.method === 'GET' || request.method === 'HEAD';
       if (path === '/api/research' && request.method === 'POST') {
         return handleResearchPost(request, env, ctx);
       }
-
-      // Events endpoint for activity feed polling
       const eventsMatch = path.match(/^\/api\/research\/([a-z0-9-]+)\/events$/);
       if (eventsMatch && isGetLike) {
         return handleResearchEvents(eventsMatch[1], url, env);
       }
-
-      // FTS5 autocomplete suggestions
       if (path === '/api/search/suggest' && isGetLike) {
         return handleSearchSuggest(url, env);
       }
-
-      // Email subscription for research notifications
       if (path === '/api/subscribe' && request.method === 'POST') {
         return handleSubscribe(request, env);
       }
-
-      // Any other /api/* path: return JSON, not the 20KB HTML 404 page.
-      // Distinguish 405 (route exists, wrong method) from 404 (no such route)
-      // so clients and curl users get a meaningful answer.
       if (path.startsWith('/api/')) {
         const knownRoutes: Array<{ pattern: RegExp; methods: string[] }> = [
           { pattern: /^\/api\/research$/, methods: ['POST'] },
@@ -269,9 +216,7 @@ async function handleRequest(request: Request, env: Env, ctx: ExecutionContext):
         );
       }
 
-      // Page routes: accept GET and HEAD. HEAD is transformed to a bodyless
-      // response by the outer wrapper in `fetch`, so the handler can treat it
-      // identically to GET.
+      // ── Page routes: accept GET and HEAD ─────────────────────────────────
       if (request.method !== 'GET' && request.method !== 'HEAD') {
         return new Response('Method not allowed', { status: 405 });
       }
@@ -281,7 +226,7 @@ async function handleRequest(request: Request, env: Env, ctx: ExecutionContext):
         const homeKey = `page:${CACHE_VERSION}:home`;
         const [cached, latestLm] = await Promise.all([
           env.CACHE.get(homeKey),
-          getLatestResearchLastmod(env),
+          getLatestResearchLastmod(env, CACHE_VERSION),
         ]);
         const listingCc = 'public, max-age=60, s-maxage=60, stale-while-revalidate=3600';
         const notModified = maybe304(request.headers.get('If-Modified-Since'), latestLm, listingCc);
@@ -292,16 +237,14 @@ async function handleRequest(request: Request, env: Env, ctx: ExecutionContext):
         return htmlResponse(html, 200, at, adPub, latestLm, listingCc);
       }
 
-      // Research new (triggers API then redirects)
       if (path === '/research/new') {
         return handleNewResearch(request, url, env, ctx, at, adPub);
       }
 
-      // Research browse
       if (path === '/research' || path === '/research/') {
         const [html, latestLm] = await Promise.all([
           renderBrowse(url, env),
-          getLatestResearchLastmod(env),
+          getLatestResearchLastmod(env, CACHE_VERSION),
         ]);
         const listingCc = 'public, max-age=60, s-maxage=60, stale-while-revalidate=3600';
         const notModified = maybe304(request.headers.get('If-Modified-Since'), latestLm, listingCc);
@@ -319,8 +262,6 @@ async function handleRequest(request: Request, env: Env, ctx: ExecutionContext):
       const slugMatch = path.match(/^\/research\/([a-z0-9-]+)$/);
       if (slugMatch) {
         const slug = slugMatch[1];
-        // ?from=<original query> marks a clustered hit — skip the KV cache so
-        // the banner reflects the user's phrasing, not a prior visitor's.
         const fromQuery = url.searchParams.get('from');
         const cacheKey = `page:${CACHE_VERSION}:${slug}`;
         const cacheMetaKey = `page:${CACHE_VERSION}:${slug}:lm`;
@@ -341,27 +282,7 @@ async function handleRequest(request: Request, env: Env, ctx: ExecutionContext):
         const result = await renderResearchResult(slug, env, fromQuery);
         if (result instanceof Response) {
           if (result.status === 404) {
-            const guessQuery = slug.replace(/-[a-f0-9]{8,}$/, '').replace(/-/g, ' ').trim();
-            return htmlResponse(
-              layout('Research Not Found', 'No research exists at this URL. Browse the archive or start a new research query.', `<div class="container empty" style="padding:4rem 1.5rem;max-width:40rem;margin:0 auto;text-align:center">
-<h2 style="font-size:1.5rem;margin-bottom:.75rem">Research not found</h2>
-<p style="color:var(--text2);margin-bottom:1.5rem">No research exists at <code style="background:var(--surface);padding:.15rem .4rem;border-radius:4px">${escapeHtml(slug)}</code>. It may have been a shared link that was never completed, or the slug may be mistyped.</p>
-${guessQuery ? `<p style="color:var(--text2);margin-bottom:1rem;font-size:.92rem">Did you mean to research <strong style="color:var(--text)">&ldquo;${escapeHtml(guessQuery)}&rdquo;</strong>?</p>
-<div style="display:flex;gap:.5rem;flex-wrap:wrap;justify-content:center;margin-bottom:2rem">
-<a href="/research/new?q=${encodeURIComponent(guessQuery)}" class="btn">Research &ldquo;${escapeHtml(guessQuery)}&rdquo;</a>
-<a href="/research?q=${encodeURIComponent(guessQuery)}" class="btn btn-ghost">Search existing research</a>
-</div>` : ''}
-<div style="margin-top:1.5rem;padding-top:1.5rem;border-top:1px solid var(--surface2)">
-<p style="color:var(--text3);font-size:.85rem;margin-bottom:.75rem">Or try a different query:</p>
-${searchBar('compact')}
-</div>
-<div style="display:flex;gap:.5rem;flex-wrap:wrap;justify-content:center;margin-top:1.5rem">
-<a href="/research" class="btn btn-ghost">Browse all research</a>
-<a href="/" class="btn btn-ghost">Home</a>
-</div>
-</div>`, '<meta name="robots" content="noindex, follow">'),
-              404, at, adPub,
-            );
+            return htmlResponse(renderNotFoundResearch(slug), 404, at, adPub);
           }
           return result;
         }
@@ -385,33 +306,10 @@ ${searchBar('compact')}
         return htmlResponse(renderAbout(), 200, at, adPub, aboutLastmodSec);
       }
 
-      // 404
-      return htmlResponse(
-        layout('Not Found', 'Page not found.', `<div class="container empty">
-<h2>404 — Not Found</h2>
-<p>The page you're looking for doesn't exist. Try browsing research or starting a new one.</p>
-<div style="display:flex;gap:.5rem;margin-top:1.25rem;flex-wrap:wrap;justify-content:center">
-<a href="/" class="btn">Go home</a>
-<a href="/research" class="btn btn-ghost">Browse research</a>
-</div>
-</div>`, '<meta name="robots" content="noindex, follow">'),
-        404, at, adPub,
-      );
+      return htmlResponse(renderGeneric404(), 404, at, adPub);
     } catch (error) {
       console.error('Unhandled error:', error);
-      return htmlResponse(
-        layout('Error', 'Something went wrong. Browse existing research or head back home.', `<div class="container empty" style="padding:4rem 1.5rem;max-width:40rem;margin:0 auto;text-align:center">
-<div class="empty-icon" style="background:rgba(239,68,68,.15);color:var(--danger)"><svg width="32" height="32" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg></div>
-<h2>Something went wrong</h2>
-<p style="color:var(--text2);margin-bottom:1.5rem">Our end hit a snag. It's probably transient — try again, or poke around while we recover.</p>
-${searchBar('compact', env.TURNSTILE_SITE_KEY)}
-<div style="display:flex;gap:.5rem;margin-top:1.5rem;flex-wrap:wrap;justify-content:center">
-<a href="/research" class="btn btn-ghost">Browse research</a>
-<a href="/" class="btn btn-ghost">Go home</a>
-</div>
-</div>`, '<meta name="robots" content="noindex, nofollow">'),
-        500, at, adPub,
-      );
+      return htmlResponse(render500(env.TURNSTILE_SITE_KEY), 500, at, adPub);
     }
 }
 
@@ -422,8 +320,7 @@ async function handleNewResearch(request: Request, url: URL, env: Env, ctx: Exec
   // Bots (including well-behaved crawlers that ignore the robots.txt disallow)
   // shouldn't trigger LLM research runs. Route them to the browse page instead —
   // they can still index existing research without creating new side-effect
-  // entries that would pollute the sitemap/feed/home. Matches only unambiguous
-  // bot UAs; humans running headless browsers still pass through.
+  // entries that would pollute the sitemap/feed/home.
   const ua = request.headers.get('User-Agent') ?? '';
   if (isBotUserAgent(ua)) {
     const dest = new URL(`/research?q=${encodeURIComponent(query)}`, url.origin);
@@ -437,15 +334,9 @@ async function handleNewResearch(request: Request, url: URL, env: Env, ctx: Exec
   // Verify Turnstile — required for exhaustive tier, optional bot-check for others
   if (env.TURNSTILE_SECRET_KEY && tierConfig.requireTurnstile) {
     const token = url.searchParams.get('cf-turnstile-response') ?? '';
-    if (!token || !(await verifyTurnstile(token, env.TURNSTILE_SECRET_KEY, '127.0.0.1'))) {
-      return htmlResponse(
-        layout('Verification Failed', 'CAPTCHA verification required for Deep Dive tier.', `<div class="container empty">
-<h2>Verification failed</h2>
-<p>Deep Dive research requires CAPTCHA verification. Please go back and try again.</p>
-<a href="/" class="btn" style="margin-top:1rem">Go home</a>
-</div>`),
-        403, analyticsToken, adsensePub,
-      );
+    const clientIp = request.headers.get('CF-Connecting-IP') ?? '';
+    if (!token || !(await verifyTurnstile(token, env.TURNSTILE_SECRET_KEY, clientIp))) {
+      return htmlResponse(renderVerificationFailed(), 403, analyticsToken, adsensePub);
     }
   }
   const apiUrl = new URL('/api/research', url.origin);
@@ -475,7 +366,7 @@ async function handleNewResearch(request: Request, url: URL, env: Env, ctx: Exec
     return Response.redirect(dest.toString(), 302);
   }
 
-  // Error page
+  // Error branches
   let errorMsg = 'Something went wrong. Please try again.';
   let rejected = false;
   let suggestedRefinement: string | null = null;
@@ -493,283 +384,16 @@ async function handleNewResearch(request: Request, url: URL, env: Env, ctx: Exec
   } catch { /* use default */ }
 
   if (rejected) {
-    const refinementBlock = suggestedRefinement
-      ? `<p style="color:var(--text2);margin-top:1rem;font-size:.9rem"><strong style="color:var(--text)">Try this instead:</strong> ${escapeHtml(suggestedRefinement)}</p>
-<div style="margin-top:.75rem"><a href="/research/new?q=${encodeURIComponent(suggestedRefinement)}" class="btn">Research &ldquo;${escapeHtml(suggestedRefinement.slice(0, 60))}${suggestedRefinement.length > 60 ? '…' : ''}&rdquo;</a></div>`
-      : '';
-    return htmlResponse(
-      layout('Query declined', errorMsg, `<div class="container empty" style="max-width:40rem;margin:0 auto;padding:4rem 1.5rem">
-<div class="empty-icon"><svg width="32" height="32" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M4.93 19h14.14c1.54 0 2.5-1.67 1.73-3L13.73 4a2 2 0 00-3.46 0L3.2 16c-.77 1.33.19 3 1.73 3z"/></svg></div>
-<h2>We couldn't research that</h2>
-<p style="color:var(--text2);line-height:1.6">${escapeHtml(errorMsg)}</p>
-${refinementBlock}
-<div style="margin-top:2rem;padding-top:1.5rem;border-top:1px solid var(--surface2)">
-<p style="color:var(--text3);font-size:.85rem;margin-bottom:.75rem">Or try a different query:</p>
-${searchBar('compact', env.TURNSTILE_SITE_KEY)}
-</div>
-<div style="display:flex;gap:.5rem;flex-wrap:wrap;justify-content:center;margin-top:1.5rem">
-<a href="/research" class="btn btn-ghost">Browse existing research</a>
-<a href="/" class="btn btn-ghost">Home</a>
-</div>
-</div>`, '<meta name="robots" content="noindex, nofollow">'),
-      400, analyticsToken, adsensePub,
-    );
+    return htmlResponse(renderRejected(errorMsg, suggestedRefinement, env.TURNSTILE_SITE_KEY), 400, analyticsToken, adsensePub);
   }
-
   if (result.status === 429) {
-    return htmlResponse(
-      layout('Please slow down', errorMsg, `<div class="container empty">
-<div class="empty-icon"><svg width="32" height="32" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg></div>
-<h2>You&rsquo;ve hit the rate limit</h2>
-<p>${escapeHtml(errorMsg)}</p>
-<p style="color:var(--text2);margin-top:.5rem">While you wait, browse existing research — chances are someone else already asked something similar.</p>
-<div style="display:flex;gap:.75rem;justify-content:center;margin-top:1.5rem;flex-wrap:wrap">
-<a href="/research" class="btn">Browse research</a>
-<a href="/" class="btn btn-ghost">Home</a>
-</div>
-</div>`, '<meta name="robots" content="noindex, nofollow">'),
-      429, analyticsToken, adsensePub,
-    );
+    return htmlResponse(renderRateLimited(errorMsg), 429, analyticsToken, adsensePub);
   }
-
-  return htmlResponse(
-    layout('Research Error', errorMsg, `<div class="container empty" style="max-width:40rem;margin:0 auto">
-<div class="empty-icon"><svg width="32" height="32" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg></div>
-<h2>Something went wrong</h2>
-<p>${escapeHtml(errorMsg)}</p>
-<div style="margin-top:1.5rem;padding-top:1.5rem;border-top:1px solid var(--surface2)">
-<p style="color:var(--text3);font-size:.85rem;margin-bottom:.75rem">Try a different query:</p>
-${searchBar('compact')}
-</div>
-<div style="display:flex;gap:.5rem;flex-wrap:wrap;justify-content:center;margin-top:1.5rem">
-<a href="/research" class="btn btn-ghost">Browse all research</a>
-<a href="/" class="btn btn-ghost">Home</a>
-</div>
-</div>`, '<meta name="robots" content="noindex, nofollow">'),
-    result.status, analyticsToken, adsensePub,
-  );
-}
-
-async function generateOgImage(slug: string, env: Env): Promise<Response> {
-  const row = await env.DB.prepare(
-    `SELECT r.query, r.category, r.summary,
-       (SELECT COUNT(*) FROM products WHERE products.research_id = r.id) AS product_count
-     FROM research r WHERE r.slug = ?`
-  ).bind(slug).first<{ query: string; category: string | null; summary: string | null; product_count: number }>();
-
-  if (!row) {
-    return new Response(OG_IMAGE_SVG, { headers: { 'Content-Type': 'image/svg+xml', 'Cache-Control': 'public, max-age=86400' } });
-  }
-
-  const pretty = displayQuery(row.query);
-  const title = escapeHtml(pretty.length > 60 ? pretty.slice(0, 57) + '...' : pretty);
-  const category = row.category ? escapeHtml(row.category) : '';
-  const subtitle = row.product_count > 0
-    ? `${row.product_count} products compared`
-    : 'AI-powered analysis';
-  const summaryText = row.summary
-    ? escapeHtml(row.summary.length > 120 ? row.summary.slice(0, 117) + '...' : row.summary)
-    : '';
-
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" width="1200" height="630">
-<rect width="1200" height="630" fill="#020617"/>
-<rect x="40" y="40" width="1120" height="550" rx="24" fill="#0f172a" stroke="#1e293b" stroke-width="2"/>
-<rect x="80" y="80" width="64" height="64" rx="14" fill="#2563eb"/>
-<text x="112" y="124" font-family="system-ui,sans-serif" font-size="28" font-weight="800" fill="#fff" text-anchor="middle">CL</text>
-<text x="160" y="120" font-family="system-ui,sans-serif" font-size="28" font-weight="700" fill="#f1f5f9">Chrisputer Labs</text>
-${category ? `<rect x="80" y="180" width="${category.length * 11 + 24}" height="32" rx="16" fill="rgba(37,99,235,0.15)"/>
-<text x="92" y="201" font-family="system-ui,sans-serif" font-size="16" font-weight="500" fill="#60a5fa">${category}</text>` : ''}
-<text x="80" y="${category ? '260' : '220'}" font-family="system-ui,sans-serif" font-size="42" font-weight="800" fill="#f1f5f9">${title}</text>
-${summaryText ? `<text x="80" y="${category ? '310' : '270'}" font-family="system-ui,sans-serif" font-size="22" fill="#94a3b8">${summaryText}</text>` : ''}
-<rect x="80" y="460" width="240" height="52" rx="12" fill="#2563eb"/>
-<text x="200" y="493" font-family="system-ui,sans-serif" font-size="20" font-weight="600" fill="#fff" text-anchor="middle">${escapeHtml(subtitle)}</text>
-<text x="1080" y="560" font-family="system-ui,sans-serif" font-size="16" fill="#64748b" text-anchor="end">chrisputer.tech</text>
-</svg>`;
-
-  return new Response(svg, {
-    headers: {
-      'Content-Type': 'image/svg+xml',
-      'Cache-Control': 'public, max-age=86400, s-maxage=86400, stale-while-revalidate=604800',
-    },
-  });
-}
-
-async function generateSitemap(origin: string, env: Env, ifModifiedSince: string | null): Promise<Response> {
-  // Only expose research pages with actual product cards. Honest-no-data results
-  // (garbage queries, insufficient source data) are thin content and will hurt
-  // ranking if Google crawls them.
-  const rows = await env.DB.prepare(
-    `WITH ranked AS (
-       SELECT r.slug, r.created_at, COALESCE(r.completed_at, r.created_at) AS lastmod,
-              ROW_NUMBER() OVER (PARTITION BY COALESCE(r.canonical_query, r.slug) ORDER BY r.created_at DESC) AS rn
-       FROM research r
-       WHERE r.status = 'complete'
-         AND EXISTS (SELECT 1 FROM products p WHERE p.research_id = r.id)
-         AND LENGTH(r.query) >= 10 AND r.query LIKE '% %'
-         AND r.query NOT LIKE 'test %' AND r.query NOT LIKE 'verify %'
-     )
-     SELECT slug, created_at, lastmod FROM ranked WHERE rn = 1
-     ORDER BY created_at DESC
-     LIMIT 5000`
-  ).all<{ slug: string; created_at: number; lastmod: number }>();
-
-  const results = rows.results ?? [];
-  const newestLastmod = results[0]?.lastmod ?? 0;
-  const lastModifiedHttp = new Date(newestLastmod * 1000).toUTCString();
-
-  if (ifModifiedSince && newestLastmod > 0) {
-    const since = Date.parse(ifModifiedSince);
-    if (!isNaN(since) && Math.floor(since / 1000) >= newestLastmod) {
-      return new Response(null, { status: 304, headers: { 'Last-Modified': lastModifiedHttp, 'Cache-Control': 'public, max-age=3600' } });
-    }
-  }
-
-  const entries = results.map((r) => {
-    const date = new Date(r.lastmod * 1000).toISOString().split('T')[0];
-    return `<url><loc>${origin}/research/${r.slug}</loc><lastmod>${date}</lastmod><changefreq>monthly</changefreq><priority>0.6</priority></url>`;
-  }).join('\n');
-
-  // Home and /research are dynamic indexes — their lastmod is the newest
-  // research completion. Signals freshness to crawlers for recrawl scheduling.
-  const dynamicLastmod = newestLastmod ? `<lastmod>${new Date(newestLastmod * 1000).toISOString().split('T')[0]}</lastmod>` : '';
-
-  const xml = `<?xml version="1.0" encoding="UTF-8"?>
-<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-<url><loc>${origin}/</loc>${dynamicLastmod}<changefreq>daily</changefreq><priority>1.0</priority></url>
-<url><loc>${origin}/research</loc>${dynamicLastmod}<changefreq>daily</changefreq><priority>0.8</priority></url>
-<url><loc>${origin}/about</loc><lastmod>${ABOUT_LASTMOD}</lastmod><changefreq>monthly</changefreq><priority>0.3</priority></url>
-${entries}
-</urlset>`;
-
-  const headers: Record<string, string> = { 'Content-Type': 'application/xml', 'Cache-Control': 'public, max-age=3600' };
-  if (newestLastmod > 0) headers['Last-Modified'] = lastModifiedHttp;
-  return new Response(xml, { headers });
-}
-
-function escapeXml(s: string): string {
-  return s
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&apos;');
-}
-
-async function generateAtomFeed(origin: string, env: Env, ifModifiedSince: string | null): Promise<Response> {
-  const rows = await env.DB.prepare(
-    `WITH ranked AS (
-       SELECT r.slug, r.query, r.summary, r.category, r.created_at, COALESCE(r.completed_at, r.created_at) AS updated,
-              ROW_NUMBER() OVER (PARTITION BY COALESCE(r.canonical_query, r.slug) ORDER BY r.created_at DESC) AS rn
-       FROM research r
-       WHERE r.status = 'complete'
-         AND EXISTS (SELECT 1 FROM products p WHERE p.research_id = r.id)
-         AND LENGTH(r.query) >= 10 AND r.query LIKE '% %'
-         AND r.query NOT LIKE 'test %' AND r.query NOT LIKE 'verify %'
-     )
-     SELECT slug, query, summary, category, created_at, updated FROM ranked WHERE rn = 1
-     ORDER BY updated DESC
-     LIMIT 50`
-  ).all<{ slug: string; query: string; summary: string | null; category: string | null; created_at: number; updated: number }>();
-
-  const results = rows.results ?? [];
-  const latestUpdated = results[0]?.updated ?? Math.floor(Date.now() / 1000);
-  const feedUpdated = new Date(latestUpdated * 1000).toISOString();
-  const lastModifiedHttp = new Date(latestUpdated * 1000).toUTCString();
-  if (ifModifiedSince) {
-    const since = Date.parse(ifModifiedSince);
-    if (!isNaN(since) && Math.floor(since / 1000) >= latestUpdated) {
-      return new Response(null, { status: 304, headers: { 'Last-Modified': lastModifiedHttp, 'Cache-Control': 'public, max-age=3600' } });
-    }
-  }
-
-  const entries = results.map((r) => {
-    const published = new Date(r.created_at * 1000).toISOString();
-    const updated = new Date(r.updated * 1000).toISOString();
-    const link = `${origin}/research/${r.slug}`;
-    const summary = r.summary ? escapeXml(r.summary.slice(0, 500)) : '';
-    // Per RFC 4287 §4.2.1, atom:author is recommended on each entry; readers
-    // (Inoreader, Feedly) attribute "Unknown author" without it.
-    const category = r.category ? `\n<category term="${escapeXml(r.category)}"/>` : '';
-    return `<entry>
-<id>${link}</id>
-<title>${escapeXml(displayQuery(r.query))}</title>
-<link href="${link}"/>
-<published>${published}</published>
-<updated>${updated}</updated>
-<author><name>Chrisputer Labs</name><uri>${origin}/</uri></author>${category}
-<summary>${summary}</summary>
-</entry>`;
-  }).join('\n');
-
-  const currentYear = new Date(latestUpdated * 1000).getUTCFullYear();
-  const xml = `<?xml version="1.0" encoding="UTF-8"?>
-<feed xmlns="http://www.w3.org/2005/Atom">
-<title>Chrisputer Labs — Research Feed</title>
-<link href="${origin}/feed.xml" rel="self"/>
-<link href="${origin}/"/>
-<id>${origin}/</id>
-<updated>${feedUpdated}</updated>
-<author><name>Chrisputer Labs</name><uri>${origin}/</uri></author>
-<subtitle>Latest AI-powered product research</subtitle>
-<icon>${origin}/favicon.svg</icon>
-<logo>${origin}/og-image.svg</logo>
-<rights>© ${currentYear} Chrisputer Labs. All rights reserved.</rights>
-<generator uri="${origin}/">Chrisputer Labs</generator>
-${entries}
-</feed>`;
-
-  return new Response(xml, {
-    headers: {
-      'Content-Type': 'application/atom+xml;charset=utf-8',
-      'Cache-Control': 'public, max-age=3600',
-      'Last-Modified': lastModifiedHttp,
-    },
-  });
-}
-
-const SCANNER_PATH_PREFIXES: ReadonlyArray<string> = [
-  '/wp-', '/wordpress', '/phpmyadmin', '/pma/', '/xmlrpc',
-  '/.env', '/.git', '/.svn', '/.DS_Store', '/.aws',
-  '/_ignition', '/vendor/phpunit', '/actuator',
-  '/cgi-bin/', '/admin/', '/administrator/', '/webdav/',
-  '/server-status', '/HNAP1', '/solr/', '/boaform/',
-];
-const SCANNER_PATH_EXTS = /\.(php|asp|aspx|jsp|cgi|do|action|cfm|rb)$/i;
-
-const BOT_UA_PATTERN = /\b(googlebot|bingbot|yandex|baiduspider|duckduckbot|applebot|facebookexternalhit|facebookbot|twitterbot|linkedinbot|slackbot|discordbot|whatsapp|telegrambot|pinterest|redditbot|msnbot|petalbot|semrushbot|ahrefsbot|mj12bot|dotbot|seznambot|screaming\s*frog|bytespider|claudebot|gptbot|ccbot|anthropic-ai|cohere-ai|perplexitybot|crawler|spider)\b/i;
-
-function isBotUserAgent(ua: string): boolean {
-  if (!ua) return true;
-  return BOT_UA_PATTERN.test(ua);
-}
-
-function isScannerProbe(path: string): boolean {
-  if (SCANNER_PATH_EXTS.test(path)) return true;
-  for (const p of SCANNER_PATH_PREFIXES) {
-    if (path.startsWith(p)) return true;
-  }
-  return false;
-}
-
-// Newest completed research timestamp — shared lastmod signal for home,
-// browse, sitemap, and feed. Single small query; SQLite optimizer uses the
-// created_at index so it's effectively O(1).
-async function getLatestResearchLastmod(env: Env): Promise<number | undefined> {
-  const row = await env.DB.prepare(
-    `SELECT MAX(COALESCE(completed_at, created_at)) AS lm
-     FROM research
-     WHERE status = 'complete'
-       AND EXISTS (SELECT 1 FROM products p WHERE p.research_id = research.id)
-       AND LENGTH(query) >= 10 AND query LIKE '% %'
-       AND query NOT LIKE 'test %' AND query NOT LIKE 'verify %'`
-  ).first<{ lm: number | null }>();
-  const lm = row?.lm;
-  return lm && lm > 0 ? lm : undefined;
+  return htmlResponse(renderResearchError(errorMsg), result.status, analyticsToken, adsensePub);
 }
 
 // Returns a 304 Not Modified if the client's If-Modified-Since covers the
-// resource's last-modified timestamp. Caller is still responsible for caching
-// the payload alongside (so the next cold request doesn't re-render).
+// resource's last-modified timestamp.
 function maybe304(ifModifiedSince: string | null, lastModifiedSec: number | undefined, cacheControl?: string): Response | null {
   if (!ifModifiedSince || !lastModifiedSec) return null;
   const since = Date.parse(ifModifiedSince);
@@ -784,13 +408,25 @@ function maybe304(ifModifiedSince: string | null, lastModifiedSec: number | unde
   });
 }
 
+// Per-request CSP nonce. Pages emit inline <script> tags carrying the literal
+// placeholder `__CSP_NONCE__`, which gets substituted here with a fresh
+// crypto-random value. Browsers that see a nonce on script-src ignore
+// 'unsafe-inline' entirely, so dropping 'unsafe-inline' only takes effect once
+// every inline script actually carries a nonce. All `on*=` handlers had to go
+// first (they can't accept a nonce) — see research-result.ts and html.ts for
+// the addEventListener replacements.
+function generateNonce(): string {
+  return crypto.randomUUID().replace(/-/g, '');
+}
+
 function htmlResponse(body: string, status = 200, analyticsToken?: string, adsensePublisherId?: string, lastModifiedSec?: number, cacheControl?: string): Response {
-  let out = body;
+  const nonce = generateNonce();
+  let out = body.replaceAll('__CSP_NONCE__', nonce);
   if (adsensePublisherId) {
-    out = out.replace('</head>', `<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-${adsensePublisherId}" crossorigin="anonymous"></script>\n</head>`);
+    out = out.replace('</head>', `<script async nonce="${nonce}" src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-${adsensePublisherId}" crossorigin="anonymous"></script>\n</head>`);
   }
   if (analyticsToken) {
-    out = out.replace('</body>', `<script defer src="https://static.cloudflareinsights.com/beacon.min.js" data-cf-beacon='{"token":"${analyticsToken}"}'></script></body>`);
+    out = out.replace('</body>', `<script defer nonce="${nonce}" src="https://static.cloudflareinsights.com/beacon.min.js" data-cf-beacon='{"token":"${analyticsToken}"}'></script></body>`);
   }
   const headers: Record<string, string> = {
     'Content-Type': 'text/html;charset=utf-8',
@@ -803,7 +439,16 @@ function htmlResponse(body: string, status = 200, analyticsToken?: string, adsen
     'Permissions-Policy': 'geolocation=(), microphone=(), camera=(), payment=()',
     'Content-Security-Policy': [
       "default-src 'self'",
-      "script-src 'self' 'unsafe-inline' https://challenges.cloudflare.com https://static.cloudflareinsights.com https://pagead2.googlesyndication.com",
+      // Scripts: nonce-based. AdSense/Turnstile/CF-Insights loaders are
+      // injected above with the nonce, and 'strict-dynamic' lets the loaders
+      // spawn their own child scripts (AdSense in particular) without each
+      // child needing a nonce. The URL allowlist stays in place as a fallback
+      // for CSP Level 2 browsers that don't understand 'strict-dynamic'. No
+      // 'unsafe-inline' — any inline script missing the nonce is blocked.
+      `script-src 'self' 'nonce-${nonce}' 'strict-dynamic' https://challenges.cloudflare.com https://static.cloudflareinsights.com https://pagead2.googlesyndication.com`,
+      // Styles still allow 'unsafe-inline' — we use extensive style="..."
+      // attribute styling in templates; converting every one to a class is a
+      // separate lift and lower-ROI than the script tightening.
       "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
       "font-src 'self' https://fonts.gstatic.com",
       "img-src 'self' data: https:",
@@ -831,17 +476,3 @@ function htmlResponse(body: string, status = 200, analyticsToken?: string, adsen
   return new Response(out, { status, headers });
 }
 
-const FAVICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="6" fill="#2563eb"/><text x="16" y="22" font-family="system-ui,sans-serif" font-size="14" font-weight="800" fill="#fff" text-anchor="middle">CL</text></svg>`;
-
-const OG_IMAGE_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" width="1200" height="630">
-<rect width="1200" height="630" fill="#020617"/>
-<rect x="40" y="40" width="1120" height="550" rx="24" fill="#0f172a" stroke="#1e293b" stroke-width="2"/>
-<rect x="80" y="100" width="80" height="80" rx="16" fill="#2563eb"/>
-<text x="120" y="158" font-family="system-ui,sans-serif" font-size="36" font-weight="800" fill="#fff" text-anchor="middle">CL</text>
-<text x="180" y="155" font-family="system-ui,sans-serif" font-size="42" font-weight="700" fill="#f1f5f9">Chrisputer Labs</text>
-<text x="80" y="280" font-family="system-ui,sans-serif" font-size="52" font-weight="800" fill="#f1f5f9">AI-Powered Product Research</text>
-<text x="80" y="350" font-family="system-ui,sans-serif" font-size="28" fill="#94a3b8">20 years of IT expertise meets AI-driven analysis.</text>
-<text x="80" y="400" font-family="system-ui,sans-serif" font-size="28" fill="#94a3b8">No fluff. No sponsored picks. Just the truth.</text>
-<rect x="80" y="460" width="200" height="56" rx="12" fill="#2563eb"/>
-<text x="180" y="496" font-family="system-ui,sans-serif" font-size="22" font-weight="600" fill="#fff" text-anchor="middle">Try it free</text>
-</svg>`;
