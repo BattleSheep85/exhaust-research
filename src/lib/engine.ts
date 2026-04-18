@@ -217,7 +217,7 @@ OUTPUT: Valid JSON matching this schema:
       "brand": "Brand/chain/operator — empty string if not applicable",
       "price": 299.99,
       "rating": 4.5,
-      "productUrl": "Retailer/reservation/booking/official URL. Empty string if unknown.",
+      "productUrl": "Retailer product/reservation/booking URL for this SPECIFIC item (must contain the item's own page path, e.g. amazon.com/dp/XXX or walmart.com/ip/YYY). DO NOT fabricate search-result URLs like amazon.com/s?k=... — if you don't know the SKU-specific URL, return empty string. Empty is infinitely better than a search URL.",
       "manufacturerUrl": "Official home URL (manufacturer for products, restaurant's own website, service provider's site). Empty string if unknown.",
       "imageUrl": "Single https:// image URL extracted from your sources. Empty string if none found.",
       "pros": ["Specific pro 1", "Specific pro 2", "Specific pro 3"],

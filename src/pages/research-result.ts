@@ -115,12 +115,26 @@ interface AffiliateIds {
 function buildAffiliateUrl(rawUrl: string, ids: AffiliateIds): string {
   if (!rawUrl || !isValidHttpUrl(rawUrl)) return '';
   try {
-    const host = new URL(rawUrl).hostname.replace(/^www\./, '');
+    const parsed = new URL(rawUrl);
+    const host = parsed.hostname.replace(/^www\./, '');
+    // Reject retailer search-results URLs outright. The synthesis LLM sometimes
+    // fabricates amazon.com/s?k=ProductName when it doesn't know the real SKU;
+    // tagging a search URL and calling it "Buy on Amazon" is dishonest — we'd
+    // rather render no CTA at all. Same rule for other retailer search paths.
+    const path = parsed.pathname.toLowerCase();
     if (host === 'amazon.com' || host.endsWith('.amazon.com')) {
+      if (path === '/s' || path.startsWith('/s/') || path === '/b') return '';
       const u = new URL(rawUrl);
       u.searchParams.set('tag', ids.amazonTag);
       return u.toString();
     }
+    // Walmart/Target/Best Buy search paths: /search, /s, /sp
+    if ((host === 'walmart.com' || host.endsWith('.walmart.com'))
+      && (path.startsWith('/search') || path === '/s')) return '';
+    if ((host === 'target.com' || host.endsWith('.target.com'))
+      && path.startsWith('/s/')) return '';
+    if ((host === 'bestbuy.com' || host.endsWith('.bestbuy.com'))
+      && path.startsWith('/site/searchpage')) return '';
     // Amazon short links (amzn.to, a.co) can't embed our tag. Return empty so
     // the caller renders no buy CTA — we won't fabricate a search URL.
     if (host === 'amzn.to' || host === 'a.co') {
