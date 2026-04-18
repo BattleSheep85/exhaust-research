@@ -56,7 +56,11 @@ export async function runEngine(
   placesApiKey?: string,
 ): Promise<EngineResult> {
   const agentTools = buildAgentTools(facets, placesApiKey);
-  const toolCtx = { tavilyApiKey, placesApiKey };
+  // Default recency_sensitive to true when facets are missing (legacy rows in
+  // the queue). Matches the classifier's default — tech-heavy traffic wants
+  // the aggressive filter by default.
+  const recencySensitive = facets?.recency_sensitive ?? true;
+  const toolCtx = { tavilyApiKey, placesApiKey, recencySensitive };
   const startTime = Date.now();
   let subrequestsUsed = 0;
   const state: AgentState = {

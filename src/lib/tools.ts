@@ -94,6 +94,10 @@ export function buildAgentTools(facets?: Facets, placesApiKey?: string): typeof 
 export interface ToolContext {
   tavilyApiKey: string;
   placesApiKey?: string;
+  // When true, Tavily-backed searches pass timeRange:'y' to filter stale sources.
+  // Falls back to the permissive behavior for evergreen subjects (restaurants,
+  // hiking, classical books) where a 3-year-old review is still relevant.
+  recencySensitive?: boolean;
 }
 
 /** Returns [resultText, subrequestsUsed] */
@@ -113,7 +117,7 @@ export async function executeTool(
 
   switch (name) {
     case 'web_search':
-      return executeSearch(args, state, config, ctx.tavilyApiKey);
+      return executeSearch(args, state, config, ctx.tavilyApiKey, ctx.recencySensitive ?? true);
     case 'read_page':
       return executeReadPage(args, state, config);
     case 'note':
@@ -169,6 +173,7 @@ async function executeSearch(
   state: AgentState,
   config: ResearchConfig,
   tavilyApiKey: string,
+  recencySensitive: boolean,
 ): Promise<[string, number]> {
   if (state.searchCount >= config.maxSearches) {
     return ['Search budget exhausted. Use note() to record findings or stop.', 0];
@@ -183,15 +188,14 @@ async function executeSearch(
   let results: ScrapedSource[];
   let subs = 0;
 
-  // Default to a 1-year time_range on every Tavily-backed provider. Three-year-
-  // old reviews rank high on Google but are almost always wrong for tech —
-  // firmware, SKUs, and pricing move too fast. Tavily caps the API at 'y' (one
-  // year); for longer windows we'd need a post-fetch filter (see publishedAt
-  // sort in the synthesis pipeline). Evergreen queries (restaurants, hiking)
-  // drop this filter via the recency_sensitive facet in the caller path.
+  // Apply a 1-year Tavily filter when the classifier flagged the query as
+  // recency-sensitive (tech, apps, current media). Evergreen subjects
+  // (restaurants, hiking, classical works) drop the filter so we don't lose
+  // still-valid older coverage. News always filters by year regardless.
+  const tr = recencySensitive ? ('y' as const) : undefined;
   switch (provider) {
     case 'web':
-      results = await tavilySearch(query, tavilyApiKey, { searchDepth: 'basic', sourceLabel: 'web', timeRange: 'y' });
+      results = await tavilySearch(query, tavilyApiKey, { searchDepth: 'basic', sourceLabel: 'web', timeRange: tr });
       subs = 1;
       break;
     case 'news':
@@ -202,7 +206,7 @@ async function executeSearch(
       results = await tavilySearch(query, tavilyApiKey, {
         includeDomains: ['youtube.com', 'youtu.be'],
         sourceLabel: 'video',
-        timeRange: 'y',
+        timeRange: tr,
       });
       subs = 1;
       break;
@@ -219,7 +223,7 @@ async function executeSearch(
       subs = 6; // up to 6 RSS feeds fetched in parallel
       break;
     default:
-      results = await tavilySearch(query, tavilyApiKey, { searchDepth: 'basic', sourceLabel: 'web', timeRange: 'y' });
+      results = await tavilySearch(query, tavilyApiKey, { searchDepth: 'basic', sourceLabel: 'web', timeRange: tr });
       subs = 1;
       break;
   }

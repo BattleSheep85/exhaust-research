@@ -68,6 +68,13 @@ export interface Facets {
   is_content: boolean;
   is_service: boolean;
   is_comparative: boolean;
+  // True when the subject rapidly evolves (tech, apps, current media) and older
+  // sources are likely wrong. False for evergreen topics (restaurants, hiking,
+  // classical works). When true the pipeline applies hard date filters at the
+  // search layer + drops stale sources before synthesis. Default when the
+  // classifier is unsure: true — tech-heavy traffic makes false positives less
+  // costly than letting a 3-year-old Wirecutter review poison a 2026 report.
+  recency_sensitive: boolean;
 }
 
 export interface ClassifierResult {
@@ -152,6 +159,10 @@ export interface ScrapedSource {
   title: string;
   content: string;
   source: string;
+  // Epoch seconds. Undefined when the provider didn't give us a date
+  // (DuckDuckGo HTML scraping, Jina-fetched pages, Places API). Synthesis
+  // uses this to sort + cull stale sources when recency_sensitive fires.
+  publishedAt?: number;
 }
 
 // ─── Agent / tool-use types ──────────────────────────────────────────────────

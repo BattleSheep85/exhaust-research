@@ -67,15 +67,25 @@ async function fetchAndParseFeed(
         return matchCount >= minMatches;
       })
       .slice(0, 5)
-      .map((item) => ({
-        url: item.link,
-        title: `[${name}] ${item.title}`,
-        content: [
-          item.pubDate ? `[${item.pubDate}]` : '',
-          item.description,
-        ].filter(Boolean).join('\n'),
-        source: 'rss',
-      }));
+      .map((item) => {
+        // formatDate() already normalized to YYYY-MM-DD when parseable; fall back
+        // to raw string parsing for anything non-standard.
+        let publishedAt: number | undefined;
+        if (item.pubDate) {
+          const ms = Date.parse(item.pubDate);
+          if (!Number.isNaN(ms)) publishedAt = Math.floor(ms / 1000);
+        }
+        return {
+          url: item.link,
+          title: `[${name}] ${item.title}`,
+          content: [
+            item.pubDate ? `[${item.pubDate}]` : '',
+            item.description,
+          ].filter(Boolean).join('\n'),
+          source: 'rss',
+          publishedAt,
+        };
+      });
   } catch (err) {
     console.log(`[rss] ${name} ERROR: ${err instanceof Error ? err.message : String(err)}`);
     return [];

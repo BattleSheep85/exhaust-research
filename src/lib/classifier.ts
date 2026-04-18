@@ -2,7 +2,9 @@ import type { Env, Facets, ClassifierResult } from '../types';
 
 const CLASSIFIER_MODEL = 'anthropic/claude-haiku-4.5';
 const CLASSIFIER_TIMEOUT_MS = 8_000;
-const CACHE_VERSION = 'v1';
+// v2: added recency_sensitive facet. Old v1 entries are stale and should re-
+// classify once on next access.
+const CACHE_VERSION = 'v2';
 const CACHE_TTL_SECONDS = 7 * 24 * 3600; // 7 days
 
 const REJECTION_CATEGORIES = [
@@ -48,13 +50,14 @@ For accepted queries, set facets (multiple can be true simultaneously):
 - is_content: media, apps, websites, shows, podcasts, courses, how-to information
 - is_service: hiring a professional (plumber, lawyer, tutor, agency, contractor)
 - is_comparative: phrased as "X vs Y" rather than "best of" — compare two named things
+- recency_sensitive: true when the subject rapidly evolves and older sources are likely wrong. TRUE for: consumer tech, software, apps, current media, smart-home gear, laptops, phones, monitors, routers, streaming services, video games, any "what's the best X right now" query. FALSE for: restaurants, hiking trails, classical books, historical topics, cooking basics, evergreen skills, named experiences that don't change year over year. When unsure, prefer TRUE — stale tech recommendations cause more harm than losing one old-but-still-good evergreen source.
 
 topical_category: a short freeform label describing what's being researched (e.g. "mechanical keyboards", "Italian restaurants", "hiking trails", "podcast apps", "tax preparation services", "4K monitors vs OLED TVs"). 2-5 words.
 
 suggested_refinement (only when relevant): a short nudge helping an ambiguous or rejected query become answerable. For rejects, suggest an adjacent allowed query. For vague accepts, suggest a sharper phrasing. null if not needed.
 
 Output ONLY this JSON shape, no prose:
-{"accept": true|false, "reject_reason": "jailbreak|illegal|medical|legal|adult|nonsense|self-harm|harassment|financial-picks" | null, "topical_category": string | null, "facets": {"needs_location": bool, "is_buyable": bool, "is_experience": bool, "is_content": bool, "is_service": bool, "is_comparative": bool}, "suggested_refinement": string | null}`;
+{"accept": true|false, "reject_reason": "jailbreak|illegal|medical|legal|adult|nonsense|self-harm|harassment|financial-picks" | null, "topical_category": string | null, "facets": {"needs_location": bool, "is_buyable": bool, "is_experience": bool, "is_content": bool, "is_service": bool, "is_comparative": bool, "recency_sensitive": bool}, "suggested_refinement": string | null}`;
 
 const DEFAULT_FACETS: Facets = {
   needs_location: false,
@@ -63,6 +66,8 @@ const DEFAULT_FACETS: Facets = {
   is_content: false,
   is_service: false,
   is_comparative: false,
+  // Default true — most site traffic is tech-heavy; stale data is the bigger risk.
+  recency_sensitive: true,
 };
 
 function validate(raw: unknown): ClassifierResult | null {
@@ -82,6 +87,10 @@ function validate(raw: unknown): ClassifierResult | null {
     is_content: facetsRaw.is_content === true,
     is_service: facetsRaw.is_service === true,
     is_comparative: facetsRaw.is_comparative === true,
+    // Missing key → default true (tech-heavy traffic; stale data worse than
+    // over-filtering). Explicit false only honored when the classifier returns
+    // boolean false.
+    recency_sensitive: facetsRaw.recency_sensitive !== false,
   };
 
   // If rejected, trust the reject_reason. If accepted, ensure at least one facet is true

@@ -67,15 +67,25 @@ export async function tavilySearch(
     const label = opts.sourceLabel ?? (opts.topic === 'news' ? 'news' : 'web');
     console.log(`[tavily] q="${query}" label=${label} depth=${opts.searchDepth ?? 'basic'} → ${results.length}`);
 
-    return results.map((r) => ({
-      url: r.url,
-      title: r.title,
-      content: [
-        r.published_date ? `[${r.published_date}]` : '',
-        r.content,
-      ].filter(Boolean).join('\n'),
-      source: label,
-    }));
+    return results.map((r) => {
+      // Tavily emits published_date as ISO 8601 or similar parseable strings.
+      // Normalize to epoch seconds; undefined when Tavily couldn't extract.
+      let publishedAt: number | undefined;
+      if (r.published_date) {
+        const ms = Date.parse(r.published_date);
+        if (!Number.isNaN(ms)) publishedAt = Math.floor(ms / 1000);
+      }
+      return {
+        url: r.url,
+        title: r.title,
+        content: [
+          r.published_date ? `[${r.published_date}]` : '',
+          r.content,
+        ].filter(Boolean).join('\n'),
+        source: label,
+        publishedAt,
+      };
+    });
   } catch (err) {
     console.log(`[tavily] ERROR q="${query}": ${err instanceof Error ? err.message : String(err)}`);
     return [];
@@ -125,17 +135,25 @@ export async function hackerNews(query: string): Promise<ScrapedSource[]> {
     return hits
       .filter((h) => h.title && (h.points ?? 0) >= 10)
       .slice(0, 5)
-      .map((h) => ({
-        url: h.url || `https://news.ycombinator.com/item?id=${h.objectID}`,
-        title: h.title || '',
-        content: [
-          h.created_at ? `[${h.created_at}]` : '',
-          `${h.points ?? 0} points, ${h.num_comments ?? 0} comments`,
-          (h.story_text ?? '').slice(0, 2000),
-          `Discussion: https://news.ycombinator.com/item?id=${h.objectID}`,
-        ].filter(Boolean).join('\n'),
-        source: 'hackernews',
-      }));
+      .map((h) => {
+        let publishedAt: number | undefined;
+        if (h.created_at) {
+          const ms = Date.parse(h.created_at);
+          if (!Number.isNaN(ms)) publishedAt = Math.floor(ms / 1000);
+        }
+        return {
+          url: h.url || `https://news.ycombinator.com/item?id=${h.objectID}`,
+          title: h.title || '',
+          content: [
+            h.created_at ? `[${h.created_at}]` : '',
+            `${h.points ?? 0} points, ${h.num_comments ?? 0} comments`,
+            (h.story_text ?? '').slice(0, 2000),
+            `Discussion: https://news.ycombinator.com/item?id=${h.objectID}`,
+          ].filter(Boolean).join('\n'),
+          source: 'hackernews',
+          publishedAt,
+        };
+      });
   } catch (err) {
     console.log(`[hackerNews] ERROR q="${query}": ${err instanceof Error ? err.message : String(err)}`);
     return [];

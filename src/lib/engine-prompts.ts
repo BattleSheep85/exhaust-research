@@ -58,6 +58,7 @@ export function buildAgentPrompt(query: string, config: ResearchConfig, facets?:
   const effectiveFacets: Facets = facets ?? {
     needs_location: false, is_buyable: true, is_experience: false,
     is_content: false, is_service: false, is_comparative: false,
+    recency_sensitive: true,
   };
   return `You are an autonomous research agent. Your goal: thoroughly research "${query}" using your tools.
 
@@ -112,6 +113,7 @@ export function buildSynthesisPrompt(
   const effectiveFacets: Facets = facets ?? {
     needs_location: false, is_buyable: true, is_experience: false,
     is_content: false, is_service: false, is_comparative: false,
+    recency_sensitive: true,
   };
 
   const notesByCategory: Record<string, string[]> = {};
@@ -125,7 +127,26 @@ export function buildSynthesisPrompt(
     .map(([cat, items]) => `## ${cat.toUpperCase()}\n${items.map((n, i) => `${i + 1}. ${n}`).join('\n')}`)
     .join('\n\n');
 
-  const sourceText = sources
+  // Sort sources by recency (dated first, newest first), then fall back to
+  // original order for undated. When recency_sensitive fires, hard-drop dated
+  // sources older than 12 months so the synthesis LLM never sees them — the
+  // prompt rule below is the belt, this is the suspenders. Undated sources are
+  // always kept since many high-quality Reddit threads lack parseable dates.
+  const nowSec = Math.floor(Date.now() / 1000);
+  const staleCutoff = effectiveFacets.recency_sensitive ? nowSec - 365 * 86400 : 0;
+  const freshSources = sources.filter((s) =>
+    !effectiveFacets.recency_sensitive || s.publishedAt === undefined || s.publishedAt >= staleCutoff
+  );
+  const rankedSources = [...freshSources].sort((a, b) => {
+    const aDate = a.publishedAt ?? 0;
+    const bDate = b.publishedAt ?? 0;
+    if (aDate === 0 && bDate === 0) return 0;
+    if (aDate === 0) return 1;  // undated sinks below dated
+    if (bDate === 0) return -1;
+    return bDate - aDate;  // newer first
+  });
+  const droppedStale = sources.length - freshSources.length;
+  const sourceText = rankedSources
     .slice(0, 100) // cap for context window
     .map((s, i) => `${i + 1}. [${s.source}] ${s.title} — ${s.url}\n   ${s.content.slice(0, 200)}`)
     .join('\n');
@@ -172,7 +193,7 @@ ${brandNote}
 RESEARCH NOTES:
 ${notesText || '(No structured notes — work from source data)'}
 
-SOURCES (${sources.length} total):
+SOURCES (${rankedSources.length} shown, newest first${droppedStale > 0 ? `, ${droppedStale} stale sources dropped` : ''}):
 ${sourceText}
 
 OUTPUT: Valid JSON matching this schema:
