@@ -89,8 +89,8 @@ function renderItemImage(imageUrl: string | null, name: string): string {
 }
 
 // Allowlist of retailer hostnames we recognize as "buy" destinations.
-// Anything else (review sites, manufacturer pages, blogs) falls through to
-// amazonSearchUrl so the user always lands on a real purchase page with our tag.
+// Anything else (review sites, manufacturer pages, blogs) renders WITHOUT a
+// buy CTA — we don't fabricate links to search results we can't vouch for.
 const BUY_HOSTS = [
   'amazon.com',
   'walmart.com',
@@ -121,8 +121,8 @@ function buildAffiliateUrl(rawUrl: string, ids: AffiliateIds): string {
       u.searchParams.set('tag', ids.amazonTag);
       return u.toString();
     }
-    // Amazon short links (amzn.to, a.co) can't embed our tag — fall back to search.
-    // Caller is expected to treat '' as "use amazonSearchUrl fallback".
+    // Amazon short links (amzn.to, a.co) can't embed our tag. Return empty so
+    // the caller renders no buy CTA — we won't fabricate a search URL.
     if (host === 'amzn.to' || host === 'a.co') {
       return '';
     }
@@ -158,25 +158,6 @@ function buildAffiliateUrl(rawUrl: string, ids: AffiliateIds): string {
   } catch {
     return '';
   }
-}
-
-function joinBrandAndName(productName: string, brand: string | null): string {
-  const name = productName.trim();
-  if (!brand) return name;
-  const b = brand.trim();
-  if (!b) return name;
-  if (name.toLowerCase().startsWith(b.toLowerCase())) return name;
-  return `${b} ${name}`;
-}
-
-function amazonSearchUrl(productName: string, brand: string | null, affiliateTag: string): string {
-  const q = joinBrandAndName(productName, brand);
-  return `https://www.amazon.com/s?k=${encodeURIComponent(q)}&tag=${encodeURIComponent(affiliateTag)}`;
-}
-
-function googleSearchUrl(productName: string, brand: string | null): string {
-  const q = joinBrandAndName(productName, brand);
-  return `https://www.google.com/search?q=${encodeURIComponent(q)}`;
 }
 
 // Categories where "Buy on Amazon" is nonsensical — services, local professionals,
@@ -306,10 +287,10 @@ function renderProduct(p: ItemRow, index: number, ids: AffiliateIds, isService: 
   // Manufacturer product page (non-affiliate, informational)
   const mfrUrl = p.manufacturer_url && isValidHttpUrl(p.manufacturer_url) ? p.manufacturer_url : '';
 
-  // Buy/visit link. For product categories: try retailer, else fall back to Amazon
-  // search with our affiliate tag. For service/professional categories: no Amazon
-  // fallback — the LLM returned a named entity, not a SKU. Prefer mfr/site URL,
-  // else a Google search for the name.
+  // Buy/visit link. We ONLY render a CTA when we have a real retailer URL we can
+  // tag — no Amazon-search fallback. A search-results page isn't a buy link; it
+  // implies a SKU we don't actually have. Services get a "Visit site" link when
+  // a manufacturer/business URL exists; otherwise no CTA at all.
   const buyRaw = p.affiliate_url || p.product_url || '';
   let ctaUrl = '';
   let ctaLabel = '';
@@ -321,9 +302,6 @@ function renderProduct(p: ItemRow, index: number, ids: AffiliateIds, isService: 
     if (serviceUrl) {
       ctaUrl = serviceUrl;
       ctaLabel = 'Visit site';
-    } else {
-      ctaUrl = googleSearchUrl(p.name, p.brand);
-      ctaLabel = 'Search online';
     }
     ctaRel = 'noopener noreferrer nofollow';
     ctaIsSponsored = false;
@@ -332,9 +310,6 @@ function renderProduct(p: ItemRow, index: number, ids: AffiliateIds, isService: 
     if (affiliate) {
       ctaUrl = affiliate;
       ctaLabel = `Buy on ${retailerLabel(affiliate)}`;
-    } else {
-      ctaUrl = amazonSearchUrl(p.name, p.brand, ids.amazonTag);
-      ctaLabel = 'Buy on Amazon';
     }
   }
 
@@ -559,18 +534,23 @@ ${searchBar('compact', env.TURNSTILE_SITE_KEY)}
     if (p.brand) item.brand = { '@type': 'Brand', name: p.brand };
     const descSource = p.verdict || p.bestFor || (p.pros.length > 0 ? p.pros.slice(0, 3).join('. ') : '');
     if (descSource) item.description = descSource;
-    if (p.price != null) {
+    // Only emit an Offer if we have a real retailer URL for this specific SKU.
+    // Google's Product guidelines want offers.url to be the actual buy page;
+    // search-results URLs are explicitly discouraged and can hurt rankings.
+    const offerRaw = p.affiliate_url || p.product_url || '';
+    const offerAffiliate = offerRaw ? buildAffiliateUrl(offerRaw, affiliateIds) : '';
+    if (p.price != null && offerAffiliate) {
       // We don't run transactions or know real-time stock, so we omit
-      // `availability` and set `seller` to the merchant we link out to.
-      // `url` points to the fulfilment link (affiliate search) so the Offer
-      // matches where the user can actually buy.
+      // `availability`. `seller` mirrors the retailer we link out to.
+      let sellerHost = '';
+      try { sellerHost = new URL(offerAffiliate).hostname.replace(/^www\./, ''); } catch { /* keep empty */ }
       const offer: Record<string, unknown> = {
         '@type': 'Offer',
         price: p.price,
         priceCurrency: 'USD',
         priceValidUntil,
-        url: amazonSearchUrl(p.name, p.brand, affiliateIds.amazonTag),
-        seller: { '@type': 'Organization', name: 'Amazon.com' },
+        url: offerAffiliate,
+        ...(sellerHost ? { seller: { '@type': 'Organization', name: retailerLabel(offerAffiliate) } } : {}),
       };
       item.offers = offer;
     }
