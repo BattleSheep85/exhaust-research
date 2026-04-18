@@ -1,10 +1,10 @@
-import type { Env, Facets, ClassifierResult } from '../types';
+import type { Env, Facets, ClassifierResult, ClarifyingQuestion } from '../types';
 
 const CLASSIFIER_MODEL = 'anthropic/claude-haiku-4.5';
 const CLASSIFIER_TIMEOUT_MS = 8_000;
-// v2: added recency_sensitive facet. Old v1 entries are stale and should re-
-// classify once on next access.
-const CACHE_VERSION = 'v2';
+// v3: added clarifying_questions[] output. Old v2 entries are missing the
+// field; re-classify on next access so Full/Exhaustive gets the grill.
+const CACHE_VERSION = 'v3';
 const CACHE_TTL_SECONDS = 7 * 24 * 3600; // 7 days
 
 const REJECTION_CATEGORIES = [
@@ -56,8 +56,18 @@ topical_category: a short freeform label describing what's being researched (e.g
 
 suggested_refinement (only when relevant): a short nudge helping an ambiguous or rejected query become answerable. For rejects, suggest an adjacent allowed query. For vague accepts, suggest a sharper phrasing. null if not needed.
 
+clarifying_questions: 0-3 questions the Full/Exhaustive tier will surface on an interstitial page BEFORE running the pipeline. Instant tier ignores these. Only ask when a specific answer would materially change the top pick — a $40 Redragon vs a $250 Keychron are both valid "best mechanical keyboard" picks depending on budget. If the query is already specific enough to land a good answer, return []. Each question has a STRUCTURED key (pick from: budget, location, timeframe, platform, use_case, household_size, experience_level, or propose a new snake_case key), a human "question" string, and 2-5 "suggested_answers" quick-pick strings.
+
+Examples:
+- "best mesh wifi" → [{"key":"budget","question":"What's your budget?","suggested_answers":["Under $200","$200-500","$500+"]},{"key":"household_size","question":"Home size?","suggested_answers":["Apartment","Small house","Large house / multi-story"]}]
+- "best mechanical keyboard" → [{"key":"budget","question":"Budget?","suggested_answers":["Under $75","$75-150","$150-300","$300+"]},{"key":"use_case","question":"Primary use?","suggested_answers":["Programming / typing","Gaming","Both"]}]
+- "best pizza in Brooklyn" → []  (already specific — known cuisine, known location)
+- "best Thai restaurant in Portland Oregon" → []  (already specific)
+- "best gaming laptop under $1500" → [{"key":"use_case","question":"Primary game type?","suggested_answers":["AAA / high-settings","Esports / competitive","Indie + streaming"]}]  (budget already stated)
+- "best mesh wifi for a 3000 sqft house with 40 devices" → []  (size + device count already stated)
+
 Output ONLY this JSON shape, no prose:
-{"accept": true|false, "reject_reason": "jailbreak|illegal|medical|legal|adult|nonsense|self-harm|harassment|financial-picks" | null, "topical_category": string | null, "facets": {"needs_location": bool, "is_buyable": bool, "is_experience": bool, "is_content": bool, "is_service": bool, "is_comparative": bool, "recency_sensitive": bool}, "suggested_refinement": string | null}`;
+{"accept": true|false, "reject_reason": "jailbreak|illegal|medical|legal|adult|nonsense|self-harm|harassment|financial-picks" | null, "topical_category": string | null, "facets": {"needs_location": bool, "is_buyable": bool, "is_experience": bool, "is_content": bool, "is_service": bool, "is_comparative": bool, "recency_sensitive": bool}, "suggested_refinement": string | null, "clarifying_questions": [{"key": string, "question": string, "suggested_answers": [string, ...]}]}`;
 
 const DEFAULT_FACETS: Facets = {
   needs_location: false,
@@ -70,12 +80,30 @@ const DEFAULT_FACETS: Facets = {
   recency_sensitive: true,
 };
 
+function parseClarifyingQuestions(raw: unknown): ClarifyingQuestion[] {
+  if (!Array.isArray(raw)) return [];
+  const out: ClarifyingQuestion[] = [];
+  for (const q of raw.slice(0, 3)) {
+    if (!q || typeof q !== 'object') continue;
+    const obj = q as Record<string, unknown>;
+    const key = typeof obj.key === 'string' ? obj.key.trim().slice(0, 40).replace(/[^a-z0-9_]/gi, '_').toLowerCase() : '';
+    const question = typeof obj.question === 'string' ? obj.question.trim().slice(0, 200) : '';
+    const answers = Array.isArray(obj.suggested_answers)
+      ? obj.suggested_answers.filter((a): a is string => typeof a === 'string' && a.trim().length > 0).map((a) => a.trim().slice(0, 60)).slice(0, 5)
+      : [];
+    if (!key || !question || answers.length < 2) continue;
+    out.push({ key, question, suggested_answers: answers });
+  }
+  return out;
+}
+
 function validate(raw: unknown): ClassifierResult | null {
   if (!raw || typeof raw !== 'object') return null;
   const obj = raw as Record<string, unknown>;
   const accept = obj.accept === true;
   const topical_category = typeof obj.topical_category === 'string' ? obj.topical_category.trim().slice(0, 120) : null;
   const suggested_refinement = typeof obj.suggested_refinement === 'string' ? obj.suggested_refinement.trim().slice(0, 200) : null;
+  const clarifying_questions = accept ? parseClarifyingQuestions(obj.clarifying_questions) : [];
 
   const reject_reason = isRejectionCategory(obj.reject_reason) ? obj.reject_reason : null;
 
@@ -98,9 +126,9 @@ function validate(raw: unknown): ClassifierResult | null {
   if (accept) {
     const anyFacet = Object.values(facets).some((v) => v);
     if (!anyFacet) facets.is_buyable = true;
-    return { accept: true, reject_reason: null, topical_category, facets, suggested_refinement };
+    return { accept: true, reject_reason: null, topical_category, facets, suggested_refinement, clarifying_questions };
   }
-  return { accept: false, reject_reason, topical_category: null, facets: DEFAULT_FACETS, suggested_refinement };
+  return { accept: false, reject_reason, topical_category: null, facets: DEFAULT_FACETS, suggested_refinement, clarifying_questions: [] };
 }
 
 function extractJson(content: string): unknown | null {
@@ -127,6 +155,7 @@ const FAILOPEN_RESULT: ClassifierResult = {
   topical_category: null,
   facets: { ...DEFAULT_FACETS },
   suggested_refinement: null,
+  clarifying_questions: [],
 };
 
 export async function classifyQuery(env: Env, query: string, canonical: string): Promise<ClassifierResult> {

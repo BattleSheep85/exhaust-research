@@ -31,6 +31,7 @@ export interface ResearchJobMessage {
   tier: Tier;
   facets?: Facets;
   topicalCategory?: string | null;
+  clarifications?: Record<string, string>;
 }
 
 export const DEFAULT_AFFILIATE_TAG = 'battlesheep0a-20';
@@ -77,6 +78,18 @@ export interface Facets {
   recency_sensitive: boolean;
 }
 
+export interface ClarifyingQuestion {
+  // Stable structured key — used as form field name (clarify_<key>) and as the
+  // map key in the persisted clarifications JSON. Suggested vocabulary: budget,
+  // location, timeframe, platform, use_case, household_size, experience_level.
+  key: string;
+  // Human-facing question text.
+  question: string;
+  // 2-5 quick-pick chips. An implicit "Other" free-text option is always
+  // rendered alongside.
+  suggested_answers: string[];
+}
+
 export interface ClassifierResult {
   accept: boolean;
   reject_reason:
@@ -93,6 +106,10 @@ export interface ClassifierResult {
   topical_category: string | null;
   facets: Facets;
   suggested_refinement: string | null;
+  // Empty when the query is self-contained. Populated (up to 3) when missing
+  // constraints would materially change the top pick. Instant tier ignores;
+  // Full/Exhaustive/Unbound surface as an interstitial page.
+  clarifying_questions: ClarifyingQuestion[];
 }
 
 // ─── Database rows ───────────────────────────────────────────────────────────
@@ -110,6 +127,7 @@ export interface ResearchRow {
   result: string | null;
   sources: string | null;
   canonical_query: string | null;
+  clarifications: string | null;
   created_at: number;
   completed_at: number | null;
   view_count: number;

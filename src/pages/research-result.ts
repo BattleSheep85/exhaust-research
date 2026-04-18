@@ -304,6 +304,7 @@ export async function renderResearchResult(slug: string, env: Env, fromQuery: st
   const hasBuyersGuide = !!(buyersGuide && (buyersGuide.howToChoose || (buyersGuide.pitfalls?.length ?? 0) > 0 || (buyersGuide.marketingToIgnore?.length ?? 0) > 0));
   const isService = isNonProductCategory(entry.category);
   const sourceList = parseJsonSafe<string[]>(entry.sources, []).filter(isValidHttpsUrl);
+  const clarifications = parseJsonSafe<Record<string, string>>(entry.clarifications, {});
 
   const date = new Date(entry.created_at * 1000).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
   const createdIso = new Date(entry.created_at * 1000).toISOString().slice(0, 10);
@@ -353,6 +354,13 @@ ${fromQuery && fromQuery !== entry.query ? `<div class="cluster-banner" style="p
 <strong style="color:var(--text)">Matched to existing research.</strong> You asked &ldquo;${escapeHtml(fromQuery)}&rdquo; — we already researched a very similar question (${date}).
 </div>
 <form action="/research/new" method="GET" style="margin:0"><input type="hidden" name="q" value="${escapeHtml(fromQuery)}"><input type="hidden" name="fresh" value="1"><button type="submit" class="btn" style="font-size:.82rem;padding:.5rem .85rem;white-space:nowrap">Re-research with fresh data</button></form>
+</div>` : ''}
+
+${Object.keys(clarifications).length > 0 ? `<div class="clarifications-bar" style="margin:1.25rem 0;padding:.75rem 1rem;background:var(--surface);border:1px solid var(--surface2);border-radius:10px">
+<div style="font-size:.72rem;text-transform:uppercase;letter-spacing:.08em;color:var(--text3);font-weight:600;margin-bottom:.4rem">Researched for</div>
+<div style="display:flex;flex-wrap:wrap;gap:.4rem">
+${Object.entries(clarifications).map(([k, v]) => `<span class="card-badge" style="font-size:.78rem"><strong style="color:var(--text)">${escapeHtml(k.replace(/_/g, ' '))}:</strong> ${escapeHtml(v)}</span>`).join('')}
+</div>
 </div>` : ''}
 
 ${isProcessing ? `<div id="processing" style="padding:1.5rem;background:var(--surface);border:1px solid rgba(37,99,235,.3);border-radius:var(--radius);margin:2rem 0">

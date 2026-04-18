@@ -119,7 +119,7 @@ export function publicResearchFilter(alias: 'r' | 'research'): string {
     AND ${alias}.query NOT LIKE 'test %' AND ${alias}.query NOT LIKE 'verify %'`;
 }
 
-export function canonicalizeQuery(query: string): string {
+export function canonicalizeQuery(query: string, clarifications?: Record<string, string>): string {
   const tokens = query
     .toLowerCase()
     .replace(/[^a-z0-9$\- ]+/g, ' ')
@@ -128,5 +128,14 @@ export function canonicalizeQuery(query: string): string {
     .filter((t) => t.length > 1 && !CANONICAL_STOPWORDS.has(t));
   // Sort for order-insensitivity. "best keyboard budget" == "budget keyboard best".
   const unique = Array.from(new Set(tokens)).sort();
-  return unique.join(' ');
+  const base = unique.join(' ');
+  if (!clarifications || Object.keys(clarifications).length === 0) return base;
+  // Clarifications shift intent enough that "best mesh wifi $200" and
+  // "best mesh wifi $500" must cluster separately. Append sorted key:value
+  // pairs (slugified) to the canonical form.
+  const suffix = Object.entries(clarifications)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([k, v]) => `${k}:${v.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9:$.-]/g, '')}`)
+    .join(' ');
+  return suffix ? `${base} ${suffix}` : base;
 }

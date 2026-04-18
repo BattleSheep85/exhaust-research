@@ -107,6 +107,7 @@ export function buildSynthesisPrompt(
   config: ResearchConfig,
   facets?: Facets,
   topicalCategory?: string | null,
+  clarifications?: Record<string, string>,
 ): string {
   const currentYear = new Date().getUTCFullYear();
   const sections = config.reportSections;
@@ -170,10 +171,13 @@ export function buildSynthesisPrompt(
     : '- Brand is optional — use an empty string when not applicable (a restaurant or hiking trail has no "brand"; leave it empty and put relevant info in metadata).';
 
   const todayIso = new Date().toISOString().slice(0, 10);
+  const clarificationsBlock = clarifications && Object.keys(clarifications).length > 0
+    ? `\nUSER CONSTRAINTS (from clarifying questions — treat as MANDATORY filters):\n${Object.entries(clarifications).map(([k, v]) => `- ${k}: ${v}`).join('\n')}\nEvery product you recommend MUST satisfy every constraint above. Reject any candidate that violates any of them, even if it would otherwise be a strong pick.\n`
+    : '';
   return `You are an expert researcher writing a comprehensive report. Analyze the research notes and sources below.
 
 TODAY'S DATE: ${todayIso}  (current year ${currentYear})
-${categoryHint}
+${categoryHint}${clarificationsBlock}
 
 RULES:
 - Be brutally honest. If an item has problems, say so.

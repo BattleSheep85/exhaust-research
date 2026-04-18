@@ -40,7 +40,7 @@ async function findClusterMatch(db: D1Database, canonical: string): Promise<stri
 export async function handleResearchPost(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
   if (!isAllowedOrigin(request)) return json({ error: 'Forbidden' }, 403);
 
-  let body: { query?: string; tier?: string; turnstileToken?: string; fresh?: boolean };
+  let body: { query?: string; tier?: string; turnstileToken?: string; fresh?: boolean; clarifications?: Record<string, string> };
   try {
     body = await request.json();
   } catch {
@@ -83,7 +83,28 @@ export async function handleResearchPost(request: Request, env: Env, ctx: Execut
     return json({ error: rateLimitError }, 429);
   }
 
-  const canonical = canonicalizeQuery(query);
+  // Sanitize clarifications FIRST: they shift clustering so we need them
+  // before cluster lookup. Map of string→string, each value capped to 80
+  // chars, max 5 entries. Rejects anything non-stringy.
+  const clarifications: Record<string, string> = {};
+  if (body.clarifications && typeof body.clarifications === 'object') {
+    let i = 0;
+    for (const [k, v] of Object.entries(body.clarifications)) {
+      if (i >= 5) break;
+      if (typeof k !== 'string' || typeof v !== 'string') continue;
+      const key = k.trim().slice(0, 40).replace(/[^a-z0-9_]/gi, '_').toLowerCase();
+      const val = v.trim().slice(0, 80);
+      if (key && val) { clarifications[key] = val; i++; }
+    }
+  }
+  const clarificationsJson = Object.keys(clarifications).length > 0 ? JSON.stringify(clarifications) : null;
+
+  // Two canonical forms: classifier cache keys by raw query (classification
+  // of "best mesh wifi" is the same regardless of user answers), but
+  // clustering + DB key by raw+clarifications (different answers = different
+  // clusters so "best mesh wifi $200" and "best mesh wifi $500" stay separate).
+  const rawCanonical = canonicalizeQuery(query);
+  const canonical = canonicalizeQuery(query, clarifications);
 
   // Cluster lookup: if a recent completed research matches this query's canonical
   // form, serve the existing slug. User can force a fresh run with ?fresh=1.
@@ -97,7 +118,7 @@ export async function handleResearchPost(request: Request, env: Env, ctx: Execut
 
   // Classify & BS-filter. Runs after cluster lookup so cached queries don't pay
   // the classifier tax. Fail-open on transport errors — see classifier.ts.
-  const classification = await classifyQuery(env, query, canonical);
+  const classification = await classifyQuery(env, query, rawCanonical);
   if (!classification.accept) {
     return json({
       rejected: true,
@@ -117,23 +138,23 @@ export async function handleResearchPost(request: Request, env: Env, ctx: Execut
 
   try {
     await env.DB.prepare(
-      'INSERT INTO research (id, slug, query, status, tier, canonical_query, topical_category, facets, created_at, view_count) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, 0)'
-    ).bind(researchId, slug, query, 'pending', tier, canonical, topicalCategory, facetsJson, now).run();
+      'INSERT INTO research (id, slug, query, status, tier, canonical_query, topical_category, facets, clarifications, created_at, view_count) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, 0)'
+    ).bind(researchId, slug, query, 'pending', tier, canonical, topicalCategory, facetsJson, clarificationsJson, now).run();
   } catch {
     // Slug collision — retry with fresh slug
     const slug2 = generateSlug(query);
     try {
       await env.DB.prepare(
-        'INSERT INTO research (id, slug, query, status, tier, canonical_query, topical_category, facets, created_at, view_count) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, 0)'
-      ).bind(researchId, slug2, query, 'pending', tier, canonical, topicalCategory, facetsJson, now).run();
+        'INSERT INTO research (id, slug, query, status, tier, canonical_query, topical_category, facets, clarifications, created_at, view_count) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, 0)'
+      ).bind(researchId, slug2, query, 'pending', tier, canonical, topicalCategory, facetsJson, clarificationsJson, now).run();
     } catch {
       return json({ error: 'Failed to create research. Please try again.' }, 500);
     }
-    await env.RESEARCH_QUEUE.send({ researchId, query, tier, facets, topicalCategory });
+    await env.RESEARCH_QUEUE.send({ researchId, query, tier, facets, topicalCategory, clarifications });
     return json({ slug: slug2 }, 201);
   }
 
-  await env.RESEARCH_QUEUE.send({ researchId, query, tier, facets, topicalCategory });
+  await env.RESEARCH_QUEUE.send({ researchId, query, tier, facets, topicalCategory, clarifications });
   return json({ slug }, 201);
 }
 
@@ -178,7 +199,7 @@ async function generatePreview(env: Env, researchId: string, query: string): Pro
   }
 }
 
-export async function executeResearch(env: Env, researchId: string, query: string, tier: Tier, facets?: Facets, topicalCategory?: string | null): Promise<void> {
+export async function executeResearch(env: Env, researchId: string, query: string, tier: Tier, facets?: Facets, topicalCategory?: string | null, clarifications?: Record<string, string>): Promise<void> {
   const config = getTierConfig(tier);
 
   // Idempotency guard: only transition pending→processing. If the row is
@@ -208,6 +229,7 @@ export async function executeResearch(env: Env, researchId: string, query: strin
       facets,
       topicalCategory ?? null,
       env.GOOGLE_PLACES_API_KEY,
+      clarifications,
     );
     // Don't let a hung preview block the main flow, but don't leak it either.
     previewPromise.catch(() => {});

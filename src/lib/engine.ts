@@ -54,6 +54,7 @@ export async function runEngine(
   facets?: Facets,
   topicalCategory?: string | null,
   placesApiKey?: string,
+  clarifications?: Record<string, string>,
 ): Promise<EngineResult> {
   const agentTools = buildAgentTools(facets, placesApiKey);
   // Default recency_sensitive to true when facets are missing (legacy rows in
@@ -211,7 +212,7 @@ export async function runEngine(
 
   await writeEvent(db, researchId, state.eventSeq++, 'synthesize', 'Writing final report...');
 
-  const synthPrompt = buildSynthesisPrompt(query, state.notes, state.sources, config, facets, topicalCategory);
+  const synthPrompt = buildSynthesisPrompt(query, state.notes, state.sources, config, facets, topicalCategory, clarifications);
 
   // Stream the synthesis so we can surface progress beats (product names as they
   // appear in the JSON) instead of a 6s black-box wait. Falls back to non-streaming

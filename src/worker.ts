@@ -3,7 +3,10 @@ import { renderHome } from './pages/home';
 import { renderResearchResult } from './pages/research-result';
 import { renderBrowse } from './pages/research-browse';
 import { renderAbout } from './pages/about';
+import { renderClarifyPage, extractClarifications } from './pages/research-clarify';
 import { handleResearchPost, handleResearchEvents, handleSearchSuggest, handleSubscribe, verifyTurnstile, executeResearch } from './pages/api';
+import { classifyQuery } from './lib/classifier';
+import { canonicalizeQuery } from './lib/utils';
 import { getTierConfig, isValidTier } from './lib/research-config';
 import {
   FAVICON_SVG, OG_IMAGE_SVG, manifestJson, opensearchXml,
@@ -60,9 +63,9 @@ export default {
   },
   async queue(batch: MessageBatch<ResearchJobMessage>, env: Env): Promise<void> {
     for (const msg of batch.messages) {
-      const { researchId, query, tier, facets, topicalCategory } = msg.body;
+      const { researchId, query, tier, facets, topicalCategory, clarifications } = msg.body;
       try {
-        await executeResearch(env, researchId, query, tier, facets, topicalCategory ?? null);
+        await executeResearch(env, researchId, query, tier, facets, topicalCategory ?? null, clarifications);
         msg.ack();
       } catch (err) {
         // Structured log so DLQ triage has query + tier context, not just the id.
@@ -331,6 +334,31 @@ async function handleNewResearch(request: Request, url: URL, env: Env, ctx: Exec
   const validTier: Tier = isValidTier(tier) ? tier : 'instant';
   const tierConfig = getTierConfig(validTier);
 
+  // Clarifying-questions grill (Full/Exhaustive/Unbound only — Instant skips
+  // for speed). Runs BEFORE Turnstile verification so the interstitial itself
+  // is free to render; Turnstile fires on final submit from the chip form.
+  // Skipped when the user already submitted answers (any clarify_* param
+  // present) or hit the explicit "skip" button.
+  const hasAnswers = Array.from(url.searchParams.keys()).some((k) => k.startsWith('clarify_'));
+  const skipClarify = url.searchParams.get('skip_clarify') === '1';
+  let clarifications: Record<string, string> = {};
+  if (validTier !== 'instant' && !hasAnswers && !skipClarify) {
+    try {
+      const classification = await classifyQuery(env, query, canonicalizeQuery(query));
+      if (classification.accept && classification.clarifying_questions.length > 0) {
+        return htmlResponse(
+          renderClarifyPage(query, validTier, classification.clarifying_questions, env.TURNSTILE_SITE_KEY),
+          200, analyticsToken, adsensePub,
+        );
+      }
+    } catch { /* classifier failure: fall open and proceed without grill */ }
+  }
+  if (hasAnswers) {
+    // Extract directly from URL params. Works even if the classifier fails
+    // open after the interstitial rendered — the user's answers still land.
+    clarifications = extractClarifications(url);
+  }
+
   // Verify Turnstile — required for exhaustive tier, optional bot-check for others
   if (env.TURNSTILE_SECRET_KEY && tierConfig.requireTurnstile) {
     const token = url.searchParams.get('cf-turnstile-response') ?? '';
@@ -349,7 +377,10 @@ async function handleNewResearch(request: Request, url: URL, env: Env, ctx: Exec
         'Content-Type': 'application/json',
         'CF-Connecting-IP': request.headers.get('CF-Connecting-IP') ?? '127.0.0.1',
       },
-      body: JSON.stringify({ query, tier, fresh: url.searchParams.get('fresh') === '1' }),
+      body: JSON.stringify({
+        query, tier, fresh: url.searchParams.get('fresh') === '1',
+        clarifications: Object.keys(clarifications).length > 0 ? clarifications : undefined,
+      }),
     }),
     env,
     ctx,
