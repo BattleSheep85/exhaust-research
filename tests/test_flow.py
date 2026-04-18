@@ -42,6 +42,44 @@ def run(base: str) -> Suite:
         assert slugs, "no completed research in sitemap — fresh deploy?"
         return True, "", f"count={len(slugs)}"
 
+    @case(s, "Corpus: majority of recent research pages have a linked product")
+    def _():
+        # Deploy-blocking floor for affiliate coverage. Individual pages can
+        # legitimately render zero outbound links under the honest-over-
+        # fabricate policy (R107), but across the corpus most pages should
+        # still carry monetization potential. A sudden drop below 50% means
+        # the affiliate-URL pipeline regressed or the LLM stopped emitting
+        # retailer-attributable product URLs.
+        #
+        # Scans the full card body (not a truncated snippet) because the links
+        # section sits ~4KB in after images + metadata + pros/cons. Earlier
+        # attempts to cap at 3000 chars silently missed every link.
+        sample = slugs[:10]
+        if len(sample) < 3:
+            return True, f"sample too small ({len(sample)})", ""
+        linked = 0
+        for candidate in sample:
+            html = sess.get(f"{base}/research/{candidate}", timeout=15).text
+            cards = re.split(r'class=["\']product["\']', html)[1:]
+            if not cards:
+                continue
+            for card in cards:
+                if (
+                    "amazon.com" in card
+                    or "walmart.com" in card
+                    or "Buy on " in card
+                    or "product-link-mfr" in card
+                    or "Visit site" in card
+                ):
+                    linked += 1
+                    break
+        ratio = linked / len(sample)
+        assert ratio >= 0.5, (
+            f"only {linked}/{len(sample)} recent pages have a linked product "
+            f"(need >=50%) — affiliate pipeline may have regressed"
+        )
+        return True, "", f"{linked}/{len(sample)} pages linked"
+
     if slug:
 
         @case(s, f"/research/{slug} renders with at least 1 product card")
@@ -66,13 +104,13 @@ def run(base: str) -> Suite:
                 assert False, "page has no product cards at all"
             with_link = 0
             for card in cards:
-                snippet = card[:3000]
+                # Scan full card — link section sits past the first 3-4KB.
                 if (
-                    "amazon.com" in snippet
-                    or "walmart.com" in snippet
-                    or "Buy on " in snippet
-                    or "product-link-mfr" in snippet
-                    or "Visit site" in snippet
+                    "amazon.com" in card
+                    or "walmart.com" in card
+                    or "Buy on " in card
+                    or "product-link-mfr" in card
+                    or "Visit site" in card
                 ):
                     with_link += 1
             return True, "", f"{with_link}/{len(cards)} cards linked"
