@@ -183,9 +183,15 @@ async function executeSearch(
   let results: ScrapedSource[];
   let subs = 0;
 
+  // Default to a 1-year time_range on every Tavily-backed provider. Three-year-
+  // old reviews rank high on Google but are almost always wrong for tech —
+  // firmware, SKUs, and pricing move too fast. Tavily caps the API at 'y' (one
+  // year); for longer windows we'd need a post-fetch filter (see publishedAt
+  // sort in the synthesis pipeline). Evergreen queries (restaurants, hiking)
+  // drop this filter via the recency_sensitive facet in the caller path.
   switch (provider) {
     case 'web':
-      results = await tavilySearch(query, tavilyApiKey, { searchDepth: 'basic', sourceLabel: 'web' });
+      results = await tavilySearch(query, tavilyApiKey, { searchDepth: 'basic', sourceLabel: 'web', timeRange: 'y' });
       subs = 1;
       break;
     case 'news':
@@ -196,6 +202,7 @@ async function executeSearch(
       results = await tavilySearch(query, tavilyApiKey, {
         includeDomains: ['youtube.com', 'youtu.be'],
         sourceLabel: 'video',
+        timeRange: 'y',
       });
       subs = 1;
       break;
@@ -212,7 +219,7 @@ async function executeSearch(
       subs = 6; // up to 6 RSS feeds fetched in parallel
       break;
     default:
-      results = await tavilySearch(query, tavilyApiKey, { searchDepth: 'basic', sourceLabel: 'web' });
+      results = await tavilySearch(query, tavilyApiKey, { searchDepth: 'basic', sourceLabel: 'web', timeRange: 'y' });
       subs = 1;
       break;
   }

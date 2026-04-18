@@ -148,9 +148,10 @@ export function buildSynthesisPrompt(
     ? '- Every item MUST have a non-empty brand.'
     : '- Brand is optional — use an empty string when not applicable (a restaurant or hiking trail has no "brand"; leave it empty and put relevant info in metadata).';
 
+  const todayIso = new Date().toISOString().slice(0, 10);
   return `You are an expert researcher writing a comprehensive report. Analyze the research notes and sources below.
 
-CURRENT YEAR: ${currentYear}.
+TODAY'S DATE: ${todayIso}  (current year ${currentYear})
 ${categoryHint}
 
 RULES:
@@ -160,6 +161,7 @@ RULES:
 - Rank items by overall recommendation, #1 being top pick.
 - Note dates and availability. Avoid recommending discontinued/closed options.
 - If data is insufficient for some items, say so.
+- STALE-SOURCE RULE: sources carry a [YYYY-MM-DD] publish-date prefix when known. For fast-moving topics (consumer tech, software, apps, current media), DO NOT include any candidate whose newest cited source is more than 12 months older than TODAY'S DATE (${todayIso}). A review from 2023 cannot support a 2026 recommendation. If every source for a candidate is stale, OMIT it — thin results beat wrong results. For evergreen topics (restaurants, hiking trails, classical books, historical information), the rule is relaxed: older sources are fine if the subject itself hasn't changed.
 ${priceNote}
 ${brandNote}
 - COMPLETENESS IS MANDATORY. Every item object MUST have: non-empty name; a numeric rating 0-5 (inferred if not explicit); AT LEAST 3 specific pros and AT LEAST 2 specific cons (nothing is flawless — if you can't name 2 honest cons it doesn't belong on the list); a verdict of 15+ words. Items missing any of these will be discarded before the user sees them.
